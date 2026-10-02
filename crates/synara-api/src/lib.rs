@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use synara_core::EntityId;
 use synara_orchestrator::{Command, Orchestrator};
-use synara_protocol::{ApiError, Envelope, ReplayResponse, WsNegotiation, CURRENT_REVISION};
+use synara_protocol::{negotiate_revision, ApiError, Envelope, ReplayResponse, WsNegotiation, CURRENT_REVISION, SERVER_CAPABILITIES};
 use synara_providers::{ProviderMetadata, ProviderRegistry};
 use synara_transport::EventBus;
 
@@ -110,19 +110,26 @@ async fn negotiate(
 ) -> Result<Json<WsNegotiation>, (axum::http::StatusCode, Json<ApiError>)> {
     let client_min = q.min_revision.unwrap_or(CURRENT_REVISION);
     let client_max = q.max_revision.unwrap_or(CURRENT_REVISION);
-    if client_min > CURRENT_REVISION || client_max < CURRENT_REVISION {
-        return Err((
+    let negotiated_revision = negotiate_revision(client_min, client_max).map_err(|error| {
+        let (code, message) = match error {
+            synara_protocol::RevisionNegotiationError::InvalidRange => (
+                "INVALID_REVISION_RANGE",
+                "min_revision must be less than or equal to max_revision",
+            ),
+            synara_protocol::RevisionNegotiationError::NoCompatibleRevision => (
+                "REVISION_MISMATCH",
+                "client and server have no compatible protocol revision",
+            ),
+        };
+        (
             axum::http::StatusCode::UPGRADE_REQUIRED,
-            Json(ApiError {
-                code: "REVISION_MISMATCH".into(),
-                message: format!("server supports revision {CURRENT_REVISION}"),
-            }),
-        ));
-    }
+            Json(ApiError { code: code.into(), message: message.into() }),
+        )
+    })?;
     if let Some(epoch) = q.epoch {
         if epoch != s.epoch {
             return Err((
-                axum::http::StatusCode::CONFLICT,
+                axum::http::StatusCode::UPGRADE_REQUIRED,
                 Json(ApiError {
                     code: "EPOCH_MISMATCH".into(),
                     message: "client epoch does not match this server".into(),
@@ -130,12 +137,22 @@ async fn negotiate(
             ));
         }
     }
-    let _ = q.client_build;
+    if let Some(build) = q.client_build.as_deref() {
+        if build.trim().is_empty() {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(ApiError {
+                    code: "INVALID_CLIENT_BUILD".into(),
+                    message: "client_build cannot be empty".into(),
+                }),
+            ));
+        }
+    }
     Ok(Json(WsNegotiation {
         epoch: s.epoch,
-        negotiated_revision: CURRENT_REVISION,
+        negotiated_revision,
         server_instance_id: s.server_instance_id.to_string(),
-        capabilities: vec!["replay".into(), "snapshot".into(), "websocket".into()],
+        capabilities: SERVER_CAPABILITIES.iter().map(|v| (*v).to_string()).collect(),
     }))
 }
 
@@ -272,44 +289,120 @@ async fn send_message(
 struct WebSocketQuery {
     #[serde(default)]
     last_sequence: u64,
+    epoch: Option<u64>,
+    revision: Option<u32>,
+    min_revision: Option<u32>,
+    max_revision: Option<u32>,
+    client_build: Option<String>,
+    server_instance: Option<String>,
 }
 
 async fn websocket(
     State(s): State<ApiState>,
     Query(q): Query<WebSocketQuery>,
     ws: WebSocketUpgrade,
-) -> Response {
+) -> Result<Response, (axum::http::StatusCode, Json<ApiError>)> {
+    let client_min = q.min_revision.unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
+    let client_max = q.max_revision.unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
+    let negotiated_revision = negotiate_revision(client_min, client_max).map_err(|error| {
+        let (code, message) = match error {
+            synara_protocol::RevisionNegotiationError::InvalidRange => (
+                "INVALID_REVISION_RANGE",
+                "min_revision must be less than or equal to max_revision",
+            ),
+            synara_protocol::RevisionNegotiationError::NoCompatibleRevision => (
+                "REVISION_MISMATCH",
+                "client and server have no compatible protocol revision",
+            ),
+        };
+        (
+            axum::http::StatusCode::UPGRADE_REQUIRED,
+            Json(ApiError { code: code.into(), message: message.into() }),
+        )
+    })?;
+    if let Some(epoch) = q.epoch {
+        if epoch != s.epoch {
+            return Err((
+                axum::http::StatusCode::UPGRADE_REQUIRED,
+                Json(ApiError {
+                    code: "EPOCH_MISMATCH".into(),
+                    message: "client epoch does not match this server".into(),
+                }),
+            ));
+        }
+    }
+    if let Some(instance) = q.server_instance.as_deref() {
+        if instance != s.server_instance_id.as_ref() {
+            return Err((
+                axum::http::StatusCode::UPGRADE_REQUIRED,
+                Json(ApiError {
+                    code: "SERVER_INSTANCE_MISMATCH".into(),
+                    message: "client is connected to a different server instance".into(),
+                }),
+            ));
+        }
+    }
+    if let Some(build) = q.client_build.as_deref() {
+        if build.trim().is_empty() {
+            return Err((
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(ApiError {
+                    code: "INVALID_CLIENT_BUILD".into(),
+                    message: "client_build cannot be empty".into(),
+                }),
+            ));
+        }
+    }
+
     let state = s.clone();
-    ws.on_upgrade(move |mut socket| async move {
+    Ok(ws.on_upgrade(move |mut socket| async move {
         let mut live = state.events.subscribe();
         use axum::extract::ws::Message;
-        let replay = {
+        let (replay, latest) = {
             let guard = state.orchestrator.lock().await;
-            guard.db.events_after(q.last_sequence).ok()
+            match (
+                guard.db.events_after(q.last_sequence),
+                guard.db.latest_sequence(),
+            ) {
+                (Ok(events), Ok(latest)) => (Some(events), latest),
+                _ => (None, q.last_sequence),
+            }
         };
 
+        let mut cursor = q.last_sequence;
         let hello = serde_json::json!({
             "type": "hello",
             "epoch": state.epoch,
-            "revision": CURRENT_REVISION,
+            "revision": negotiated_revision,
             "server_instance_id": state.server_instance_id,
+            "latest_sequence": latest,
+            "snapshot_required": q.last_sequence > latest,
         });
-        let _ = socket.send(Message::Text(hello.to_string().into())).await;
-        if let Some(events) = replay {
-            for event in events {
-                let envelope = serde_json::json!({
-                    "type": "event",
-                    "revision": event.version,
-                    "sequence": event.sequence,
-                    "event_type": event.event_type,
-                    "entity_id": event.entity_id,
-                    "payload": event.payload,
-                });
-                if socket.send(Message::Text(envelope.to_string().into())).await.is_err() {
-                    return;
-                }
+        if socket.send(Message::Text(hello.to_string().into())).await.is_err() {
+            return;
+        }
+        let Some(events) = replay else {
+            let _ = socket.send(Message::Text(serde_json::json!({
+                "type": "resync_required",
+                "reason": "replay_failed"
+            }).to_string().into())).await;
+            return;
+        };
+        for event in events {
+            cursor = cursor.max(event.sequence);
+            let envelope = serde_json::json!({
+                "type": "event",
+                "revision": event.version,
+                "sequence": event.sequence,
+                "event_type": event.event_type,
+                "entity_id": event.entity_id,
+                "payload": event.payload,
+            });
+            if socket.send(Message::Text(envelope.to_string().into())).await.is_err() {
+                return;
             }
         }
+
         loop {
             tokio::select! {
                 incoming = socket.recv() => {
@@ -326,6 +419,10 @@ async fn websocket(
                 event = live.recv() => {
                     match event {
                         Ok(envelope) => {
+                            if envelope.sequence <= cursor {
+                                continue;
+                            }
+                            cursor = envelope.sequence;
                             let message = serde_json::json!({
                                 "type": "event",
                                 "revision": envelope.revision,
@@ -337,7 +434,10 @@ async fn websocket(
                             }
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                            let _ = socket.send(Message::Text(serde_json::json!({"type":"resync_required"}).to_string().into())).await;
+                            let _ = socket.send(Message::Text(serde_json::json!({
+                                "type":"resync_required",
+                                "last_sequence":cursor
+                            }).to_string().into())).await;
                             break;
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -345,7 +445,7 @@ async fn websocket(
                 }
             }
         }
-    })
+    }))
 }
 
 fn internal_error(error: anyhow::Error) -> (axum::http::StatusCode, Json<ApiError>) {
