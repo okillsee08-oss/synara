@@ -35,6 +35,30 @@ pub enum Command {
         turn_id: EntityId,
         error: String,
     },
+    CreateTask {
+        thread_id: EntityId,
+        name: String,
+    },
+    StartTask {
+        task_id: EntityId,
+    },
+    CompleteTask {
+        task_id: EntityId,
+    },
+    FailTask {
+        task_id: EntityId,
+        error: String,
+    },
+    CancelTask {
+        task_id: EntityId,
+    },
+    CreateSubagent {
+        task_id: EntityId,
+        provider_kind: Option<String>,
+    },
+    StopSubagent {
+        subagent_id: EntityId,
+    },
     ApproveTool {
         tool_call_id: EntityId,
         approved: bool,
@@ -80,6 +104,25 @@ impl Orchestrator {
                     anyhow::bail!("turn does not exist: {turn_id}");
                 }
             }
+            Command::CreateTask { thread_id, .. } => {
+                if !self.db.thread_exists(*thread_id)? {
+                    anyhow::bail!("thread does not exist: {thread_id}");
+                }
+            }
+            Command::StartTask { task_id }
+            | Command::CompleteTask { task_id }
+            | Command::FailTask { task_id, .. }
+            | Command::CancelTask { task_id } => {
+                if !self.db.task_exists(*task_id)? {
+                    anyhow::bail!("task does not exist: {task_id}");
+                }
+            }
+            Command::CreateSubagent { task_id, .. } => {
+                if !self.db.task_exists(*task_id)? {
+                    anyhow::bail!("task does not exist: {task_id}");
+                }
+            }
+            Command::StopSubagent { .. } => {}
             Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
         }
 
@@ -134,6 +177,62 @@ impl Orchestrator {
                 "turn",
                 "TurnFailed",
                 json!({ "turn_id": turn_id, "error": error }),
+            ),
+            Command::CreateTask { thread_id, name } => {
+                let task_id = EntityId::new();
+                (
+                    task_id,
+                    "task",
+                    "TaskCreated",
+                    json!({
+                        "thread_id": thread_id,
+                        "name": name,
+                        "task_id": task_id,
+                    }),
+                )
+            }
+            Command::StartTask { task_id } => (
+                task_id,
+                "task",
+                "TaskStarted",
+                json!({ "task_id": task_id }),
+            ),
+            Command::CompleteTask { task_id } => (
+                task_id,
+                "task",
+                "TaskCompleted",
+                json!({ "task_id": task_id }),
+            ),
+            Command::FailTask { task_id, error } => (
+                task_id,
+                "task",
+                "TaskFailed",
+                json!({ "task_id": task_id, "error": error }),
+            ),
+            Command::CancelTask { task_id } => (
+                task_id,
+                "task",
+                "TaskCancelled",
+                json!({ "task_id": task_id }),
+            ),
+            Command::CreateSubagent { task_id, provider_kind } => {
+                let subagent_id = EntityId::new();
+                (
+                    subagent_id,
+                    "subagent",
+                    "SubagentCreated",
+                    json!({
+                        "task_id": task_id,
+                        "provider_kind": provider_kind,
+                        "subagent_id": subagent_id,
+                    }),
+                )
+            }
+            Command::StopSubagent { subagent_id } => (
+                subagent_id,
+                "subagent",
+                "SubagentStopped",
+                json!({ "subagent_id": subagent_id }),
             ),
             Command::ApproveTool {
                 tool_call_id,
