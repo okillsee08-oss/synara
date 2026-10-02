@@ -4,4 +4,5 @@ version.workspace=true
 edition.workspace=true
 license.workspace=true
 [dependencies]
-tokio={version="1",features=["time","sync"]}
+tokio={version="1",features=["time","sync","macros"]}
+tokio-util={version="0.7",features=["rt"]}
