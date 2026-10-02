@@ -1,9 +1,11 @@
 name: Synara Rust Rewrite
+
 on:
   push:
     branches: [rust-rewrite]
   pull_request:
-    branches: [rust-rewrite]
+    branches: [main]
+
 jobs:
   check:
     runs-on: ubuntu-latest
