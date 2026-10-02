@@ -29,21 +29,27 @@ impl Orchestrator {
 
     pub fn dispatch(&mut self, command: Command) -> Result<EntityId> {
         match &command {
-            Command::CreateWorkspace { project_id, .. } if !self.db.project_exists(*project_id)? => {
-                anyhow::bail!("project does not exist: {project_id}");
+            Command::CreateWorkspace { project_id, .. } => {
+                if !self.db.project_exists(*project_id)? {
+                    anyhow::bail!("project does not exist: {project_id}");
+                }
             }
-            Command::CreateThread { workspace_id, .. } if !self.db.workspace_exists(*workspace_id)? => {
-                anyhow::bail!("workspace does not exist: {workspace_id}");
+            Command::CreateThread { workspace_id, .. } => {
+                if !self.db.workspace_exists(*workspace_id)? {
+                    anyhow::bail!("workspace does not exist: {workspace_id}");
+                }
             }
-            Command::SendMessage { thread_id, .. } | Command::StartTurn { thread_id }
-                if !self.db.thread_exists(*thread_id)? =>
-            {
-                anyhow::bail!("thread does not exist: {thread_id}");
+            Command::SendMessage { thread_id, .. } | Command::StartTurn { thread_id } => {
+                if !self.db.thread_exists(*thread_id)? {
+                    anyhow::bail!("thread does not exist: {thread_id}");
+                }
             }
-            Command::StopTurn { turn_id } if !self.db.turn_exists(*turn_id)? => {
-                anyhow::bail!("turn does not exist: {turn_id}");
+            Command::StopTurn { turn_id } => {
+                if !self.db.turn_exists(*turn_id)? {
+                    anyhow::bail!("turn does not exist: {turn_id}");
+                }
             }
-            _ => {}
+            Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
         }
 
         let (id, scope, event_type, payload) = match command {
