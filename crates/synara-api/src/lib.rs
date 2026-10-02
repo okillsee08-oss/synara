@@ -38,6 +38,9 @@ pub struct RuntimeSummary {
     pub latest_sequence: u64,
     pub projects: u64,
     pub threads: u64,
+    pub workspaces: u64,
+    pub turns: u64,
+    pub approvals: u64,
     pub messages: u64,
     pub provider_count: usize,
 }
@@ -138,6 +141,9 @@ async fn summary(
         latest_sequence: db.latest_sequence().map_err(internal_error)?,
         projects: db.project_count().map_err(internal_error)?,
         threads: db.thread_count().map_err(internal_error)?,
+        workspaces: db.workspace_count().map_err(internal_error)?,
+        turns: db.turn_count().map_err(internal_error)?,
+        approvals: db.approval_count().map_err(internal_error)?,
         messages: db.message_count().map_err(internal_error)?,
         provider_count: s.providers.list().len(),
     }))
