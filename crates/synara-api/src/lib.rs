@@ -229,13 +229,25 @@ async fn send_message(
     Ok(Json(CommandResponse { id }))
 }
 
+#[derive(Debug, Deserialize)]
+struct WebSocketQuery {
+    #[serde(default)]
+    last_sequence: u64,
+}
+
 async fn websocket(
     State(s): State<ApiState>,
+    Query(q): Query<WebSocketQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
     let state = s.clone();
     ws.on_upgrade(move |mut socket| async move {
         use axum::extract::ws::Message;
+        let replay = {
+            let guard = state.orchestrator.lock().await;
+            guard.db.events_after(q.last_sequence).ok()
+        };
+
         let hello = serde_json::json!({
             "type": "hello",
             "epoch": state.epoch,
@@ -243,6 +255,21 @@ async fn websocket(
             "server_instance_id": state.server_instance_id,
         });
         let _ = socket.send(Message::Text(hello.to_string().into())).await;
+        if let Some(events) = replay {
+            for event in events {
+                let envelope = serde_json::json!({
+                    "type": "event",
+                    "revision": event.version,
+                    "sequence": event.sequence,
+                    "event_type": event.event_type,
+                    "entity_id": event.entity_id,
+                    "payload": event.payload,
+                });
+                if socket.send(Message::Text(envelope.to_string().into())).await.is_err() {
+                    return;
+                }
+            }
+        }
         while let Some(Ok(message)) = socket.recv().await {
             match message {
                 Message::Ping(data) => {
