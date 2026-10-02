@@ -180,3 +180,43 @@ mod tests {
         assert!(attempts.load(Ordering::SeqCst) >= 2);
     }
 }
+
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    #[tokio::test]
+    async fn zero_attempt_policy_still_runs_once() {
+        let attempts = Arc::new(AtomicU32::new(0));
+        let seen = attempts.clone();
+        let scheduler = Scheduler::new();
+        let handle = scheduler.schedule("zero-attempts", Schedule { interval: Duration::from_secs(60), run_immediately: true, retry: RetryPolicy { max_attempts: 0, delay: Duration::ZERO } }, move || {
+            let seen = seen.clone();
+            async move { seen.fetch_add(1, Ordering::SeqCst); Err("expected".into()) }
+        }).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        handle.cancel();
+        handle.join().await.unwrap();
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn replacing_schedule_cancels_previous_job() {
+        let runs = Arc::new(AtomicU32::new(0));
+        let scheduler = Scheduler::new();
+        let first_runs = runs.clone();
+        let first = scheduler.schedule("same-id", Schedule { interval: Duration::from_millis(2), run_immediately: false, retry: RetryPolicy::default() }, move || {
+            let first_runs = first_runs.clone(); async move { first_runs.fetch_add(1, Ordering::SeqCst); Ok(()) }
+        }).await;
+        let second_runs = runs.clone();
+        let second = scheduler.schedule("same-id", Schedule { interval: Duration::from_millis(2), run_immediately: false, retry: RetryPolicy::default() }, move || {
+            let second_runs = second_runs.clone(); async move { second_runs.fetch_add(1, Ordering::SeqCst); Ok(()) }
+        }).await;
+        first.join().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(7)).await;
+        second.cancel(); second.join().await.unwrap();
+        assert!(runs.load(Ordering::SeqCst) > 0);
+    }
+}
