@@ -1,11 +1,11 @@
 use axum::{
     Json, Router,
-    extract::{Query, State, WebSocketUpgrade},
+    extract::{Path, Query, State, WebSocketUpgrade},
     response::Response,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
@@ -17,6 +17,7 @@ use synara_protocol::{
     negotiate_revision,
 };
 use synara_providers::{ProviderMetadata, ProviderRegistry};
+use synara_terminal::Terminal;
 use synara_transport::EventBus;
 
 #[derive(Clone)]
@@ -27,6 +28,7 @@ pub struct ApiState {
     pub orchestrator: Arc<Mutex<Orchestrator>>,
     pub providers: Arc<ProviderRegistry>,
     pub events: EventBus<serde_json::Value>,
+    pub terminals: Arc<Mutex<HashMap<String, Arc<Mutex<Terminal>>>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,6 +160,34 @@ pub struct CommandResponse {
     pub id: EntityId,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateTerminalRequest {
+    pub shell: Option<String>,
+    pub cwd: Option<String>,
+    pub cols: Option<u16>,
+    pub rows: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TerminalInputRequest {
+    pub input: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TerminalResizeRequest {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TerminalResponse {
+    pub id: String,
+    pub shell: String,
+    pub cwd: Option<String>,
+    pub cols: u16,
+    pub rows: u16,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProjectResponse {
     pub id: EntityId,
@@ -206,6 +236,11 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/threads", get(list_threads).post(create_thread))
         .route("/api/v1/messages", get(list_messages).post(send_message))
         .route("/api/v1/turns", post(start_turn))
+        .route("/api/v1/terminals", get(list_terminals).post(create_terminal))
+        .route("/api/v1/terminals/:id/input", post(write_terminal))
+        .route("/api/v1/terminals/:id/resize", post(resize_terminal))
+        .route("/api/v1/terminals/:id/kill", post(kill_terminal))
+        .route("/ws/terminals/:id", get(terminal_websocket))
         .route("/api/v1/tasks", get(list_tasks).post(create_task))
         .route("/api/v1/tasks/:id/start", post(start_task))
         .route("/api/v1/tasks/:id/complete", post(complete_task))
@@ -418,6 +453,186 @@ async fn start_turn(
         message_id,
         turn_id,
         provider_session_id,
+    }))
+}
+
+async fn list_terminals(
+    State(s): State<ApiState>,
+) -> Json<Vec<TerminalResponse>> {
+    let terminals = s.terminals.lock().await;
+    Json(terminals
+        .iter()
+        .map(|(id, _)| TerminalResponse {
+            id: id.clone(),
+            shell: "managed".into(),
+            cwd: None,
+            cols: 0,
+            rows: 0,
+        })
+        .collect())
+}
+
+async fn create_terminal(
+    State(s): State<ApiState>,
+    Json(req): Json<CreateTerminalRequest>,
+) -> Result<Json<TerminalResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let shell = req.shell.unwrap_or_else(|| {
+        if cfg!(windows) {
+            "cmd.exe".into()
+        } else {
+            "/bin/sh".into()
+        }
+    });
+    let cols = req.cols.unwrap_or(120).max(1);
+    let rows = req.rows.unwrap_or(36).max(1);
+    let terminal = Terminal::spawn(
+        &shell,
+        req.cwd
+            .as_deref()
+            .map(std::path::Path::new),
+        cols,
+        rows,
+    )
+    .map_err(internal_error)?;
+    let id = EntityId::new().to_string();
+    let terminal = Arc::new(Mutex::new(terminal));
+    terminal
+        .lock()
+        .await
+        .start_output_stream()
+        .map_err(internal_error)?;
+    s.terminals.lock().await.insert(id.clone(), terminal);
+
+    Ok(Json(TerminalResponse {
+        id,
+        shell,
+        cwd: req.cwd,
+        cols,
+        rows,
+    }))
+}
+
+async fn write_terminal(
+    State(s): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<TerminalInputRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let terminal = s
+        .terminals
+        .lock()
+        .await
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "TERMINAL_NOT_FOUND".into(),
+                message: format!("terminal not found: {id}"),
+            }),
+        ))?;
+    terminal.lock().await.write(req.input.as_bytes()).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id: EntityId::new() }))
+}
+
+async fn resize_terminal(
+    State(s): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<TerminalResizeRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.cols == 0 || req.rows == 0 {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_SIZE".into(),
+                message: "cols and rows must be greater than zero".into(),
+            }),
+        ));
+    }
+    let terminal = s
+        .terminals
+        .lock()
+        .await
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "TERMINAL_NOT_FOUND".into(),
+                message: format!("terminal not found: {id}"),
+            }),
+        ))?;
+    terminal.lock().await.resize(req.cols, req.rows).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id: EntityId::new() }))
+}
+
+async fn kill_terminal(
+    State(s): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let terminal = s.terminals.lock().await.remove(&id).map(|(_, value)| value);
+    let terminal = terminal.ok_or_else(|| (
+        axum::http::StatusCode::NOT_FOUND,
+        Json(ApiError {
+            code: "TERMINAL_NOT_FOUND".into(),
+            message: format!("terminal not found: {id}"),
+        }),
+    ))?;
+    terminal.lock().await.kill().map_err(internal_error)?;
+    Ok(Json(CommandResponse { id: EntityId::new() }))
+}
+
+async fn terminal_websocket(
+    State(s): State<ApiState>,
+    Path(id): Path<String>,
+    ws: WebSocketUpgrade,
+) -> Result<Response, (axum::http::StatusCode, Json<ApiError>)> {
+    let terminal = s
+        .terminals
+        .lock()
+        .await
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "TERMINAL_NOT_FOUND".into(),
+                message: format!("terminal not found: {id}"),
+            }),
+        ))?;
+    Ok(ws.on_upgrade(move |mut socket| async move {
+        use axum::extract::ws::Message;
+        let mut output = terminal.lock().await.subscribe();
+        loop {
+            tokio::select! {
+                value = output.recv() => {
+                    match value {
+                        Ok(chunk) => {
+                            if socket.send(Message::Binary(chunk.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            let _ = socket.send(Message::Text(
+                                serde_json::json!({"type":"resync_required","reason":"terminal_output_lag"}).to_string().into()
+                            )).await;
+                            break;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+                incoming = socket.recv() => {
+                    match incoming {
+                        Some(Ok(Message::Text(text))) if text == "close" => break,
+                        Some(Ok(Message::Ping(data))) => {
+                            let _ = socket.send(Message::Pong(data)).await;
+                        }
+                        Some(Ok(Message::Close(_))) | None => break,
+                        Some(Err(_)) => break,
+                        Some(Ok(_)) => {}
+                    }
+                }
+            }
+        }
     }))
 }
 
