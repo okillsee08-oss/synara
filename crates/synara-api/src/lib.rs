@@ -32,7 +32,6 @@ pub struct NegotiationQuery {
 }
 
 #[derive(Debug, Serialize)]
-#[derive(Debug, Serialize)]
 pub struct RuntimeSummary {
     pub latest_sequence: u64,
     pub projects: u64,
