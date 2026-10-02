@@ -159,3 +159,16 @@ Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request. For a r
 ## License
 
 Synara is licensed under the [MIT License](./LICENSE).
+## Rust rewrite development
+
+The Rust rewrite is developed on the `V1-Proto` integration branch. Worker branches target `V1-Proto` independently so changes can be reviewed without modifying `main`.
+
+### Runtime and security boundaries
+
+Provider output, repository files, logs, imported content, and other external text are treated as untrusted data. They do not authorize tool use, grant filesystem access, disclose credentials, or bypass approval requirements.
+
+Process creation and teardown stay behind the Rust process/platform boundaries. A process operation is not considered successful merely because a request was issued; callers must observe the resulting status where the API requires confirmation.
+
+Tool approvals are explicit decisions. A denied or unanswered approval must not be treated as permission to execute the underlying action.
+
+For Rust changes, use the repository's documented verification commands and report any platform-specific checks that could not be run locally.
