@@ -32,6 +32,7 @@ pub async fn run() -> Result<()> {
         orchestrator: Arc::new(Mutex::new(orchestrator)),
         providers: Arc::new(providers),
         events: EventBus::new(2048),
+        terminals: Arc::new(Mutex::new(std::collections::HashMap::new())),
     };
 
     for (metadata, mut receiver) in provider_subscriptions {
