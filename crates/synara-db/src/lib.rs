@@ -242,11 +242,9 @@ impl Database {
             "ProviderTextDelta" => {
                 let key = format!("provider_output:{}", e.entity_id);
                 let previous = tx
-                    .query_row(
-                        "SELECT value FROM projections WHERE key=?",
-                        [&key],
-                        |r| r.get::<_, String>(0),
-                    )
+                    .query_row("SELECT value FROM projections WHERE key=?", [&key], |r| {
+                        r.get::<_, String>(0)
+                    })
                     .optional()?
                     .unwrap_or_default();
                 let text = format!(
