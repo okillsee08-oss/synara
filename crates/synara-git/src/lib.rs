@@ -92,5 +92,5 @@ pub fn commit(path: impl AsRef<Path>, message: &str) -> Result<String> {
         &tree,
         &[&parent],
     )?;
-    Ok(commit.id().to_string())
+    Ok(commit.to_string())
 }
