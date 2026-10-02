@@ -122,7 +122,16 @@ impl Orchestrator {
                     anyhow::bail!("task does not exist: {task_id}");
                 }
             }
-            Command::StopSubagent { .. } => {}
+            Command::ApproveTool { tool_call_id, .. } => {
+                if !self.db.tool_call_exists(*tool_call_id)? {
+                    anyhow::bail!("tool call does not exist: {tool_call_id}");
+                }
+            }
+            Command::StopSubagent { subagent_id } => {
+                if !self.db.subagent_exists(*subagent_id)? {
+                    anyhow::bail!("subagent does not exist: {subagent_id}");
+                }
+            }
             Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
         }
 
