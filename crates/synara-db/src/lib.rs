@@ -146,6 +146,33 @@ impl Database {
         Ok(out)
     }
 
+    pub fn project_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?)
+    }
+
+    pub fn thread_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
+    }
+
+    pub fn message_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
+    }
+
+    pub fn projection(&self, key: &str) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare("SELECT value FROM projections WHERE key=?")?;
+        let mut rows = stmt.query([key])?;
+        Ok(rows.next()?.map(|row| row.get(0)).transpose()?)
+    }
+
+    pub fn set_projection(&self, key: &str, value: &str, sequence: u64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO projections(key,value,updated_sequence) VALUES(?,?,?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_sequence=excluded.updated_sequence",
+            params![key, value, sequence],
+        )?;
+        Ok(())
+    }
+
     pub fn latest_sequence(&self) -> Result<u64> {
         Ok(self.conn.query_row("SELECT COALESCE(MAX(sequence),0) FROM events", [], |r| r.get(0))?)
     }
