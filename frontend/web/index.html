@@ -38,7 +38,7 @@
     .message.user{background:#141c27}
     .role{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8090a4;margin-bottom:5px}
     .composer{border-top:1px solid #202632;padding:14px}
-    .composer-inner{max-width:940px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+    .composer-inner{max-width:940px;margin:0 auto;display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:end}
     .event-log{position:fixed;right:16px;bottom:96px;max-width:380px;display:grid;gap:6px}
     .toast{background:#111821;border:1px solid #2a3442;padding:8px 10px;border-radius:8px;font-size:12px;box-shadow:0 8px 24px #0008}
     .empty{display:grid;place-items:center;height:100%;color:#798594}
@@ -100,6 +100,7 @@
     </section>
     <section class="composer">
       <form id="messageForm" class="composer-inner">
+        <select id="providerSelect" disabled required></select>
         <textarea id="composer" placeholder="Send a message…" disabled required></textarea>
         <button id="sendButton" class="primary" disabled>Send</button>
       </form>
@@ -111,7 +112,7 @@
 <script>
 (() => {
   const API = location.protocol === "http:" ? location.origin : "http://127.0.0.1:3210";
-  const state = { projects: [], workspaces: [], threads: [], messages: [], selectedThread: null, latestSequence: 0, ws: null, negotiation: null };
+  const state = { projects: [], workspaces: [], threads: [], messages: [], providers: [], selectedThread: null, latestSequence: 0, ws: null, negotiation: null };
 
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -136,20 +137,22 @@
 
   async function refresh() {
     try {
-      const [projects, workspaces, threads, messages, summary] = await Promise.all([
+      const [projects, workspaces, threads, messages, providers, summary] = await Promise.all([
         request("/api/v1/projects"),
         request("/api/v1/workspaces"),
         request("/api/v1/threads"),
         request("/api/v1/messages"),
+        request("/api/v1/providers"),
         request("/api/v1/summary")
       ]);
       state.projects = projects;
       state.workspaces = workspaces;
       state.threads = threads;
       state.messages = messages;
+      state.providers = providers;
       state.latestSequence = summary.latest_sequence;
       render();
-      $("summary").textContent = `P ${summary.projects} · W ${summary.workspaces} · T ${summary.threads} · M ${summary.messages}`;
+      $("summary").textContent = `P ${summary.projects} · W ${summary.workspaces} · T ${summary.threads} · M ${summary.messages} · PS ${summary.provider_sessions}`;
     } catch (error) {
       $("connection").textContent = "Server unavailable";
       $("connection").style.color = "#d88989";
@@ -172,6 +175,10 @@
       return `<option value="${w.id}">${esc(project ? project.name : w.project_id)} · ${esc(w.root_path)}</option>`;
     }).join("") || '<option value="">Create a workspace first</option>';
 
+    $("providerSelect").innerHTML = state.providers.map(p =>
+      `<option value="${esc(p.kind)}">${esc(p.display_name)}</option>`
+    ).join("") || '<option value="">No providers</option>';
+
     $("threads").innerHTML = state.threads.map(t => `
       <div class="item ${t.id === state.selectedThread ? "active" : ""}" data-thread="${t.id}">
         <div>${esc(t.title || "Untitled thread")}</div>
@@ -192,6 +199,7 @@
       $("threadHeading").textContent = "Select a thread";
       $("threadSubheading").textContent = "";
       $("messages").innerHTML = '<div class="empty">Create or select a thread to begin.</div>';
+      $("providerSelect").disabled = true;
       $("composer").disabled = true;
       $("sendButton").disabled = true;
       return;
@@ -204,8 +212,9 @@
         <div class="role">${esc(m.role)}</div>
         <div>${esc(m.content)}</div>
       </article>`).join("") || '<div class="empty">No messages yet.</div>';
-    $("composer").disabled = false;
-    $("sendButton").disabled = false;
+    $("providerSelect").disabled = state.providers.length === 0;
+    $("composer").disabled = state.providers.length === 0;
+    $("sendButton").disabled = state.providers.length === 0;
     $("composer").focus();
     const chat = document.querySelector(".chat");
     chat.scrollTop = chat.scrollHeight;
@@ -306,9 +315,10 @@
     const content = $("composer").value.trim();
     if (!state.selectedThread || !content) return;
     try {
-      await request("/api/v1/messages", {method:"POST", body:JSON.stringify({
+      await request("/api/v1/turns", {method:"POST", body:JSON.stringify({
         thread_id: state.selectedThread,
-        content
+        provider_kind: $("providerSelect").value,
+        prompt: content
       })});
       $("composer").value = "";
       await refresh();
