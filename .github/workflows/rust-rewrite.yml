@@ -2,7 +2,7 @@ name: Synara Rust Rewrite
 
 on:
   push:
-    branches: [rust-rewrite]
+    branches: [rust-rewrite, V1-Proto]
   pull_request:
     branches: [main]
 
