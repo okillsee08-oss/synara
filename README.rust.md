@@ -20,3 +20,5 @@ Provider-native protocols are isolated behind adapters, durable state is persist
 
 
 V1 Proto CI uses the pinned Rust toolchain to normalize formatting before the compile and test gates.
+
+CI verification trigger refreshed at current V1 Proto head.
