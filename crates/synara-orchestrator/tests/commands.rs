@@ -87,3 +87,53 @@ fn creates_parent_chain_before_children() {
         .dispatch(Command::StopTurn { turn_id })
         .unwrap();
 }
+
+
+#[test]
+fn task_and_subagent_lifecycle_is_durable() {
+    let db = Database::open_memory().unwrap();
+    let mut orchestrator = Orchestrator::new(db).unwrap();
+    let project_id = orchestrator
+        .dispatch(Command::CreateProject {
+            name: "demo".into(),
+            root_path: "/tmp/demo".into(),
+        })
+        .unwrap();
+    let workspace_id = orchestrator
+        .dispatch(Command::CreateWorkspace {
+            project_id,
+            root_path: "/tmp/demo".into(),
+        })
+        .unwrap();
+    let thread_id = orchestrator
+        .dispatch(Command::CreateThread {
+            workspace_id,
+            title: Some("agent".into()),
+        })
+        .unwrap();
+    let task_id = orchestrator
+        .dispatch(Command::CreateTask {
+            thread_id,
+            name: "build feature".into(),
+        })
+        .unwrap();
+
+    orchestrator
+        .dispatch(Command::StartTask { task_id })
+        .unwrap();
+    let subagent_id = orchestrator
+        .dispatch(Command::CreateSubagent {
+            task_id,
+            provider_kind: Some("codex".into()),
+        })
+        .unwrap();
+    orchestrator
+        .dispatch(Command::StopSubagent { subagent_id })
+        .unwrap();
+    orchestrator
+        .dispatch(Command::CompleteTask { task_id })
+        .unwrap();
+
+    assert_eq!(orchestrator.db.task_count().unwrap(), 1);
+    assert_eq!(orchestrator.db.subagent_count().unwrap(), 1);
+}
