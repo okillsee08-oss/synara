@@ -17,3 +17,6 @@ The server defaults to 127.0.0.1:3210 and supports SYNARA_ADDR for binding confi
 Core/domain -> events/database -> orchestrator -> runtime/providers/process/Git/files -> API/transport -> Tauri/GPUI/CLI.
 
 Provider-native protocols are isolated behind adapters, durable state is persisted in SQLite, and event sequence numbers provide replay foundations for reconnecting clients.
+
+
+V1 Proto CI uses the pinned Rust toolchain to normalize formatting before the compile and test gates.
