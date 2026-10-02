@@ -214,7 +214,19 @@ impl Database {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
     }
 
-    pub fn workspace_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)\n    }\n\n    pub fn turn_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)\n    }\n\n    pub fn approval_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)\n    }\n\n    pub fn message_count(&self) -> Result<u64> {
+    pub fn workspace_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)
+    }
+
+    pub fn turn_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)
+    }
+
+    pub fn approval_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)
+    }
+
+    pub fn message_count(&self) -> Result<u64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
     }
 
