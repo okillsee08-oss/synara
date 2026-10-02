@@ -41,12 +41,14 @@ impl Orchestrator {
                 EntityId::new(), "message", "MessageCreated",
                 json!({ "thread_id": thread_id, "content": content }),
             ),
-            Command::StartTurn { thread_id } => (
-                thread_id, "turn", "TurnStarted", json!({ "thread_id": thread_id }),
-            ),
-            Command::StopTurn { thread_id } => (
-                thread_id, "turn", "TurnStopped", json!({ "thread_id": thread_id }),
-            ),
+            Command::StartTurn { thread_id } => {
+                let turn_id = EntityId::new();
+                (turn_id, "turn", "TurnStarted", json!({ "thread_id": thread_id, "turn_id": turn_id }))
+            },
+            Command::StopTurn { thread_id } => {
+                let turn_id = EntityId::new();
+                (turn_id, "turn", "TurnStopped", json!({ "thread_id": thread_id, "turn_id": turn_id }))
+            },
             Command::ApproveTool { tool_call_id, approved } => (
                 tool_call_id, "approval",
                 if approved { "ToolApproved" } else { "ToolRejected" },
