@@ -66,3 +66,22 @@ impl ProviderAdapter for CliProvider {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn sessions_are_isolated() {
+        let provider = CliProvider::new("test", "Test", "sh");
+        let first = provider.start_session("thread-a").await.unwrap();
+        let second = provider.start_session("thread-b").await.unwrap();
+        assert_ne!(first, second);
+        provider.send_turn(&first, "printf first").await.unwrap();
+        provider.send_turn(&second, "printf second").await.unwrap();
+        provider.interrupt(&first).await.unwrap();
+        provider.interrupt(&second).await.unwrap();
+        assert!(provider.sessions.lock().await.is_empty());
+    }
+}
