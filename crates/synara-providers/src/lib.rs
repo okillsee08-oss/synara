@@ -1,0 +1,5 @@
+use anyhow::Result;use async_trait::async_trait;use serde::{Deserialize,Serialize};use serde_json::Value;
+#[derive(Clone,Debug,Serialize,Deserialize)]pub struct ProviderMetadata{pub kind:String,pub display_name:String}
+#[derive(Clone,Debug,Serialize,Deserialize)]pub enum ProviderRuntimeEvent{Started{session:String},TextDelta{session:String,text:String},ToolCall{session:String,name:String,arguments:Value},Completed{session:String},Failed{session:String,error:String}}
+#[async_trait]pub trait ProviderAdapter:Send+Sync{fn metadata(&self)->ProviderMetadata;async fn start_session(&self,thread:&str)->Result<String>;async fn send_turn(&self,session:&str,prompt:&str)->Result<()>;async fn interrupt(&self,session:&str)->Result<()>;}
+pub struct ProviderRegistry{adapters:Vec<Box<dyn ProviderAdapter>>}impl ProviderRegistry{pub fn new()->Self{Self{adapters:Vec::new()}}pub fn register<A:ProviderAdapter+'static>(&mut self,a:A){self.adapters.push(Box::new(a));}pub fn list(&self)->Vec<ProviderMetadata>{self.adapters.iter().map(|a|a.metadata()).collect()}}
