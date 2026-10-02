@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 pub struct Terminal {
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+    child: Box<dyn portable_pty::Child + Send>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
 }
