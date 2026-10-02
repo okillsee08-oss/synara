@@ -435,6 +435,91 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dispatch_rejects_missing_parent_entities() {
+        let db = Database::open_memory().unwrap();
+        let mut orchestrator = Orchestrator::new(db).unwrap();
+
+        let missing = EntityId::new();
+        assert!(orchestrator
+            .dispatch(Command::CreateWorkspace {
+                project_id: missing,
+                root_path: "/tmp/workspace".into(),
+            })
+            .is_err());
+        assert!(orchestrator
+            .dispatch(Command::CreateThread {
+                workspace_id: missing,
+                title: None,
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn dispatch_rejects_two_running_turns_for_one_thread() {
+        let db = Database::open_memory().unwrap();
+        let mut orchestrator = Orchestrator::new(db).unwrap();
+
+        let project = orchestrator
+            .dispatch(Command::CreateProject {
+                name: "test".into(),
+                root_path: "/tmp/project".into(),
+            })
+            .unwrap();
+        let workspace = orchestrator
+            .dispatch(Command::CreateWorkspace {
+                project_id: project,
+                root_path: "/tmp/project".into(),
+            })
+            .unwrap();
+        let thread = orchestrator
+            .dispatch(Command::CreateThread {
+                workspace_id: workspace,
+                title: Some("thread".into()),
+            })
+            .unwrap();
+
+        orchestrator.dispatch(Command::StartTurn { thread_id: thread }).unwrap();
+        assert!(orchestrator
+            .dispatch(Command::StartTurn { thread_id: thread })
+            .is_err());
+    }
+
+    #[test]
+    fn recovery_is_idempotent_after_first_pass() {
+        let db = Database::open_memory().unwrap();
+        let mut orchestrator = Orchestrator::new(db).unwrap();
+
+        let project = orchestrator
+            .dispatch(Command::CreateProject {
+                name: "test".into(),
+                root_path: "/tmp/project".into(),
+            })
+            .unwrap();
+        let workspace = orchestrator
+            .dispatch(Command::CreateWorkspace {
+                project_id: project,
+                root_path: "/tmp/project".into(),
+            })
+            .unwrap();
+        let thread = orchestrator
+            .dispatch(Command::CreateThread {
+                workspace_id: workspace,
+                title: None,
+            })
+            .unwrap();
+        let task = orchestrator
+            .dispatch(Command::CreateTask {
+                thread_id: thread,
+                name: "recover".into(),
+            })
+            .unwrap();
+        orchestrator.dispatch(Command::StartTask { task_id: task }).unwrap();
+
+        assert_eq!(orchestrator.recover_interrupted_runtime().unwrap(), 1);
+        assert_eq!(orchestrator.recover_interrupted_runtime().unwrap(), 0);
+    }
+
+    #[test]
     fn provider_events_become_durable_events() {
         let db = Database::open_memory().unwrap();
         let mut orchestrator = Orchestrator::new(db).unwrap();
