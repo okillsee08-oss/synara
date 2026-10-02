@@ -62,7 +62,12 @@ impl Scheduler {
         Instant::now() + delay
     }
 
-    pub async fn schedule<F, Fut>(&self, id: impl Into<String>, schedule: Schedule, job: F) -> AutomationHandle
+    pub async fn schedule<F, Fut>(
+        &self,
+        id: impl Into<String>,
+        schedule: Schedule,
+        job: F,
+    ) -> AutomationHandle
     where
         F: Fn() -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), String>> + Send + 'static,

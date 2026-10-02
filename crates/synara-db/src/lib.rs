@@ -620,7 +620,15 @@ impl Database {
         let mut out = Vec::new();
         for row in rows {
             let (id, name, interval, enabled, attempts, delay, updated) = row?;
-            out.push((id.parse()?, name, interval, enabled, attempts, delay, updated));
+            out.push((
+                id.parse()?,
+                name,
+                interval,
+                enabled,
+                attempts,
+                delay,
+                updated,
+            ));
         }
         Ok(out)
     }
