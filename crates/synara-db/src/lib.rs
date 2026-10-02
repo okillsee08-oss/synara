@@ -252,7 +252,10 @@ impl Database {
                 )?;
             }
             "ToolApproved" | "ToolRejected" => {
-                let tool_call_id = e.payload["tool_call_id"].to_string().trim_matches('"').to_string();
+                let tool_call_id = e.payload["tool_call_id"]
+                    .to_string()
+                    .trim_matches('"')
+                    .to_string();
                 let approved = e.payload["approved"]
                     .as_bool()
                     .unwrap_or(e.event_type == "ToolApproved");
@@ -268,7 +271,11 @@ impl Database {
                 )?;
                 tx.execute(
                     "UPDATE tool_calls SET status=?, updated_sequence=? WHERE id=?",
-                    params![if approved { "approved" } else { "rejected" }, e.sequence, tool_call_id],
+                    params![
+                        if approved { "approved" } else { "rejected" },
+                        e.sequence,
+                        tool_call_id
+                    ],
                 )?;
             }
             "TaskCreated" => {
@@ -461,7 +468,16 @@ impl Database {
 
     pub fn list_tool_calls(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, Option<synara_core::EntityId>, String, String, String, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            Option<synara_core::EntityId>,
+            String,
+            String,
+            String,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,turn_id,name,arguments_json,status,created_sequence
              FROM tool_calls ORDER BY created_sequence",
@@ -826,7 +842,14 @@ impl Database {
 
     pub fn list_approvals(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<bool>, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            synara_core::EntityId,
+            Option<bool>,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,tool_call_id,approved,updated_sequence
              FROM approvals ORDER BY updated_sequence",
@@ -847,6 +870,4 @@ impl Database {
         }
         Ok(out)
     }
-
-
 }
