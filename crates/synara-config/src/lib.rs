@@ -75,8 +75,7 @@ impl ServerConfig {
                 .map(|v| v.parse())
                 .transpose()?
                 .unwrap_or(defaults.epoch),
-            client_build: std::env::var("SYNARA_CLIENT_BUILD")
-                .unwrap_or(defaults.client_build),
+            client_build: std::env::var("SYNARA_CLIENT_BUILD").unwrap_or(defaults.client_build),
         })
     }
 }
