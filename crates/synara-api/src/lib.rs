@@ -85,6 +85,40 @@ pub struct CommandResponse {
     pub id: EntityId,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ProjectResponse {
+    pub id: EntityId,
+    pub name: String,
+    pub root_path: String,
+    pub created_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkspaceResponse {
+    pub id: EntityId,
+    pub project_id: EntityId,
+    pub root_path: String,
+    pub created_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ThreadResponse {
+    pub id: EntityId,
+    pub workspace_id: EntityId,
+    pub title: Option<String>,
+    pub created_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MessageResponse {
+    pub id: EntityId,
+    pub thread_id: EntityId,
+    pub role: String,
+    pub content: String,
+    pub created_sequence: u64,
+}
+
+
 pub fn router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -92,10 +126,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/events", get(events))
         .route("/api/v1/providers", get(providers))
         .route("/api/v1/summary", get(summary))
-        .route("/api/v1/projects", post(create_project))
-        .route("/api/v1/workspaces", post(create_workspace))
-        .route("/api/v1/threads", post(create_thread))
-        .route("/api/v1/messages", post(send_message))
+        .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/workspaces", get(list_workspaces).post(create_workspace))
+        .route("/api/v1/threads", get(list_threads).post(create_thread))
+        .route("/api/v1/messages", get(list_messages).post(send_message))
         .route("/ws", get(websocket))
         .with_state(state)
 }
@@ -209,6 +243,83 @@ async fn events(
 struct ReplayQuery {
     #[serde(default)]
     after: u64,
+}
+
+async fn list_projects(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<ProjectResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let projects = guard
+        .db
+        .list_projects()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(|(id, name, root_path, created_sequence)| ProjectResponse {
+            id,
+            name,
+            root_path,
+            created_sequence,
+        })
+        .collect();
+    Ok(Json(projects))
+}
+
+async fn list_workspaces(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<WorkspaceResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let workspaces = guard
+        .db
+        .list_workspaces()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(|(id, project_id, root_path, created_sequence)| WorkspaceResponse {
+            id,
+            project_id,
+            root_path,
+            created_sequence,
+        })
+        .collect();
+    Ok(Json(workspaces))
+}
+
+async fn list_threads(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<ThreadResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let threads = guard
+        .db
+        .list_threads()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(|(id, workspace_id, title, created_sequence)| ThreadResponse {
+            id,
+            workspace_id,
+            title,
+            created_sequence,
+        })
+        .collect();
+    Ok(Json(threads))
+}
+
+async fn list_messages(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<MessageResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let messages = guard
+        .db
+        .list_messages()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(|(id, thread_id, role, content, created_sequence)| MessageResponse {
+            id,
+            thread_id,
+            role,
+            content,
+            created_sequence,
+        })
+        .collect();
+    Ok(Json(messages))
 }
 
 async fn create_project(
