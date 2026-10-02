@@ -95,9 +95,29 @@ impl Database {
                  created_sequence INTEGER NOT NULL,
                  updated_sequence INTEGER NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS tasks(
+                 id TEXT PRIMARY KEY,
+                 thread_id TEXT NOT NULL,
+                 name TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS subagents(
+                 id TEXT PRIMARY KEY,
+                 task_id TEXT NOT NULL,
+                 provider_kind TEXT,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_status ON provider_sessions(status);
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_provider ON provider_sessions(provider_kind);
-             CREATE INDEX IF NOT EXISTS idx_provider_sessions_thread ON provider_sessions(thread_id);",
+             CREATE INDEX IF NOT EXISTS idx_provider_sessions_thread ON provider_sessions(thread_id);
+             CREATE INDEX IF NOT EXISTS idx_tasks_thread ON tasks(thread_id);
+             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+             CREATE INDEX IF NOT EXISTS idx_subagents_task ON subagents(task_id);
+             CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);",
         )?;
 
         let has_provider_thread_id: u64 = self.conn.query_row(
@@ -207,6 +227,64 @@ impl Database {
                         e.payload["approved"].as_bool().map(|v| if v { 1 } else { 0 }),
                         e.sequence
                     ],
+                )?;
+            }
+            "TaskCreated" => {
+                tx.execute(
+                    "INSERT INTO tasks(id,thread_id,name,status,created_sequence,updated_sequence)
+                     VALUES(?,?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["thread_id"].to_string().trim_matches('"'),
+                        e.payload["name"].as_str().unwrap_or_default(),
+                        "pending",
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "TaskStarted" => {
+                tx.execute(
+                    "UPDATE tasks SET status='running', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "TaskCompleted" => {
+                tx.execute(
+                    "UPDATE tasks SET status='completed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "TaskFailed" => {
+                tx.execute(
+                    "UPDATE tasks SET status='failed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "TaskCancelled" => {
+                tx.execute(
+                    "UPDATE tasks SET status='cancelled', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "SubagentCreated" => {
+                tx.execute(
+                    "INSERT INTO subagents(id,task_id,provider_kind,status,created_sequence,updated_sequence)
+                     VALUES(?,?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["task_id"].to_string().trim_matches('"'),
+                        e.payload["provider_kind"].as_str(),
+                        "running",
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "SubagentStopped" => {
+                tx.execute(
+                    "UPDATE subagents SET status='stopped', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
             "ProviderSessionStarted" => {
@@ -341,6 +419,78 @@ impl Database {
         Ok(self
             .conn
             .query_row("SELECT COUNT(*) FROM provider_sessions", [], |r| r.get(0))?)
+    }
+
+    pub fn task_count(&self) -> Result<u64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0))?)
+    }
+
+    pub fn subagent_count(&self) -> Result<u64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM subagents", [], |r| r.get(0))?)
+    }
+
+    pub fn task_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn list_tasks(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, String, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,thread_id,name,status,created_sequence FROM tasks ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, u64>(4)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, thread_id, name, status, sequence) = row?;
+            out.push((id.parse()?, thread_id.parse()?, name, status, sequence));
+        }
+        Ok(out)
+    }
+
+    pub fn list_subagents(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<String>, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,task_id,provider_kind,status,created_sequence FROM subagents ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, u64>(4)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, task_id, provider_kind, status, sequence) = row?;
+            out.push((
+                id.parse()?,
+                task_id.parse()?,
+                provider_kind,
+                status,
+                sequence,
+            ));
+        }
+        Ok(out)
     }
 
     pub fn project_exists(&self, id: synara_core::EntityId) -> Result<bool> {
