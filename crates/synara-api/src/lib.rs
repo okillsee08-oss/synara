@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
@@ -29,6 +29,8 @@ pub struct ApiState {
     pub providers: Arc<ProviderRegistry>,
     pub events: EventBus<serde_json::Value>,
     pub terminals: Arc<Mutex<HashMap<String, Arc<Mutex<Terminal>>>>>,
+    pub web_dir: PathBuf,
+    pub client_build: Arc<str>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -260,9 +262,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/tool-calls/:id/reject", post(reject_tool))
         .route("/ws", get(websocket))
         .layer(CorsLayer::permissive())
-        .fallback_service(ServeDir::new(
-            std::env::var("SYNARA_WEB_DIR").unwrap_or_else(|_| "frontend/web".into()),
-        ))
+        .fallback_service(ServeDir::new(state.web_dir.clone()))
         .with_state(state)
 }
 
