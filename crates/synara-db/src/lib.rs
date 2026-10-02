@@ -824,3 +824,28 @@ impl Database {
             })?)
     }
 }
+
+
+    pub fn list_approvals(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<bool>, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,tool_call_id,approved,updated_sequence
+             FROM approvals ORDER BY updated_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            let approved = r.get::<_, Option<i64>>(2)?.map(|v| v != 0);
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                approved,
+                r.get::<_, u64>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, tool_call_id, approved, sequence) = row?;
+            out.push((id.parse()?, tool_call_id.parse()?, approved, sequence));
+        }
+        Ok(out)
+    }
