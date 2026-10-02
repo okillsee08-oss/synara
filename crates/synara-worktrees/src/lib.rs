@@ -2,11 +2,7 @@ use anyhow::Result;
 use git2::{Repository, WorktreeAddOptions, WorktreePruneOptions};
 use std::path::{Path, PathBuf};
 
-pub fn create(
-    repo: impl AsRef<Path>,
-    path: impl AsRef<Path>,
-    branch: &str,
-) -> Result<PathBuf> {
+pub fn create(repo: impl AsRef<Path>, path: impl AsRef<Path>, branch: &str) -> Result<PathBuf> {
     let r = Repository::discover(repo)?;
     let branch_ref = format!("refs/heads/{branch}");
     let reference = r.find_reference(&branch_ref)?;

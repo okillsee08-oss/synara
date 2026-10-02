@@ -111,8 +111,8 @@ impl AcpSession {
                     continue;
                 }
 
-                let value: Value = serde_json::from_str(line.trim())
-                    .context("invalid ACP JSON-RPC message")?;
+                let value: Value =
+                    serde_json::from_str(line.trim()).context("invalid ACP JSON-RPC message")?;
 
                 if value.get("id").is_some() {
                     let id = value.get("id").and_then(Value::as_u64);
