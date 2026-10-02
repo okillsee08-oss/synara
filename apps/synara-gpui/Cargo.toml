@@ -5,5 +5,4 @@ edition.workspace=true
 license.workspace=true
 
 [dependencies]
-gpui={version="0.2.2",default-features=false,features=["font-kit"]}
-gpui_platform={version="0.1.0",default-features=false,features=["font-kit","wayland","x11"]}
+gpui="0.2.2"
