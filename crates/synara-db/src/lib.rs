@@ -125,6 +125,7 @@ impl Database {
              CREATE TABLE IF NOT EXISTS automations(
                  id TEXT PRIMARY KEY,
                  name TEXT NOT NULL,
+                 action TEXT NOT NULL,
                  interval_seconds INTEGER NOT NULL,
                  enabled INTEGER NOT NULL,
                  retry_attempts INTEGER NOT NULL,
@@ -141,6 +142,16 @@ impl Database {
              CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);
              CREATE INDEX IF NOT EXISTS idx_automations_enabled ON automations(enabled);",
         )?;
+
+        let automation_has_action: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('automations') WHERE name='action'",
+            [],
+            |r| r.get(0),
+        )?;
+        if automation_has_action == 0 {
+            self.conn
+                .execute("ALTER TABLE automations ADD COLUMN action TEXT NOT NULL DEFAULT 'event'", [])?;
+        }
 
         let has_provider_thread_id: u64 = self.conn.query_row(
             "SELECT COUNT(*) FROM pragma_table_info('provider_sessions') WHERE name='thread_id'",
@@ -310,11 +321,12 @@ impl Database {
             "AutomationCreated" => {
                 tx.execute(
                     "INSERT INTO automations(
-                        id,name,interval_seconds,enabled,retry_attempts,retry_delay_seconds,created_sequence,updated_sequence
-                     ) VALUES(?,?,?,?,?,?,?,?)",
+                        id,name,action,interval_seconds,enabled,retry_attempts,retry_delay_seconds,created_sequence,updated_sequence
+                     ) VALUES(?,?,?,?,?,?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
                         e.payload["name"].as_str().unwrap_or_default(),
+                        e.payload["action"].as_str().unwrap_or("event"),
                         e.payload["interval_seconds"].as_i64().unwrap_or(60),
                         e.payload["enabled"].as_bool().unwrap_or(true) as i64,
                         e.payload["retry_attempts"].as_i64().unwrap_or(3),
@@ -333,6 +345,12 @@ impl Database {
             "AutomationDisabled" => {
                 tx.execute(
                     "UPDATE automations SET enabled=0, updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "AutomationFired" => {
+                tx.execute(
+                    "UPDATE automations SET updated_sequence=? WHERE id=?",
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
@@ -656,20 +674,21 @@ impl Database {
 
     pub fn list_automations(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, String, u64, bool, u32, u64, u64)>> {
+    ) -> Result<Vec<(synara_core::EntityId, String, String, u64, bool, u32, u64, u64)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id,name,interval_seconds,enabled,retry_attempts,retry_delay_seconds,updated_sequence
+            "SELECT id,name,action,interval_seconds,enabled,retry_attempts,retry_delay_seconds,updated_sequence
              FROM automations ORDER BY created_sequence",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, String>(1)?,
-                r.get::<_, u64>(2)?,
-                r.get::<_, i64>(3)? != 0,
-                r.get::<_, u32>(4)?,
-                r.get::<_, u64>(5)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, u64>(3)?,
+                r.get::<_, i64>(4)? != 0,
+                r.get::<_, u32>(5)?,
                 r.get::<_, u64>(6)?,
+                r.get::<_, u64>(7)?,
             ))
         })?;
         let mut out = Vec::new();
