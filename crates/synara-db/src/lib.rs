@@ -122,13 +122,24 @@ impl Database {
                  created_sequence INTEGER NOT NULL,
                  updated_sequence INTEGER NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS automations(
+                 id TEXT PRIMARY KEY,
+                 name TEXT NOT NULL,
+                 interval_seconds INTEGER NOT NULL,
+                 enabled INTEGER NOT NULL,
+                 retry_attempts INTEGER NOT NULL,
+                 retry_delay_seconds INTEGER NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_status ON provider_sessions(status);
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_provider ON provider_sessions(provider_kind);
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_thread ON provider_sessions(thread_id);
              CREATE INDEX IF NOT EXISTS idx_tasks_thread ON tasks(thread_id);
              CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
              CREATE INDEX IF NOT EXISTS idx_subagents_task ON subagents(task_id);
-             CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);",
+             CREATE INDEX IF NOT EXISTS idx_subagents_status ON subagents(status);
+             CREATE INDEX IF NOT EXISTS idx_automations_enabled ON automations(enabled);",
         )?;
 
         let has_provider_thread_id: u64 = self.conn.query_row(
@@ -276,6 +287,35 @@ impl Database {
                         e.sequence,
                         tool_call_id
                     ],
+                )?;
+            }
+            "AutomationCreated" => {
+                tx.execute(
+                    "INSERT INTO automations(
+                        id,name,interval_seconds,enabled,retry_attempts,retry_delay_seconds,created_sequence,updated_sequence
+                     ) VALUES(?,?,?,?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["name"].as_str().unwrap_or_default(),
+                        e.payload["interval_seconds"].as_i64().unwrap_or(60),
+                        e.payload["enabled"].as_bool().unwrap_or(true) as i64,
+                        e.payload["retry_attempts"].as_i64().unwrap_or(3),
+                        e.payload["retry_delay_seconds"].as_i64().unwrap_or(1),
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "AutomationEnabled" => {
+                tx.execute(
+                    "UPDATE automations SET enabled=1, updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "AutomationDisabled" => {
+                tx.execute(
+                    "UPDATE automations SET enabled=0, updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
             "TaskCreated" => {
@@ -549,6 +589,38 @@ impl Database {
                 provider_kind,
                 thread_id.map(|v| v.parse()).transpose()?,
             ));
+        }
+        Ok(out)
+    }
+
+    pub fn automation_count(&self) -> Result<u64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM automations", [], |r| r.get(0))?)
+    }
+
+    pub fn list_automations(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, String, u64, bool, u32, u64, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,name,interval_seconds,enabled,retry_attempts,retry_delay_seconds,updated_sequence
+             FROM automations ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, u64>(2)?,
+                r.get::<_, i64>(3)? != 0,
+                r.get::<_, u32>(4)?,
+                r.get::<_, u64>(5)?,
+                r.get::<_, u64>(6)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, interval, enabled, attempts, delay, updated) = row?;
+            out.push((id.parse()?, name, interval, enabled, attempts, delay, updated));
         }
         Ok(out)
     }
