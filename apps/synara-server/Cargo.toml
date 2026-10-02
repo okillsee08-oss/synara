@@ -16,4 +16,5 @@ synara-providers={path="../../crates/synara-providers"}
 synara-diagnostics={path="../../crates/synara-diagnostics"}
 synara-transport={path="../../crates/synara-transport"}
 synara-protocol={path="../../crates/synara-protocol"}
+synara-config={path="../../crates/synara-config"}
 serde_json.workspace=true
