@@ -57,6 +57,7 @@ impl ProviderAdapter for CliProvider {
         if let Some(stdout) = child.take_stdout() {
             let events = self.events.clone();
             let session_for_task = session.clone();
+            let sessions = self.sessions.clone();
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -65,9 +66,11 @@ impl ProviderAdapter for CliProvider {
                         text: line,
                     });
                 }
-                let _ = events.send(ProviderRuntimeEvent::Completed {
-                    session: session_for_task,
-                });
+                if sessions.lock().await.remove(&session_for_task).is_some() {
+                    let _ = events.send(ProviderRuntimeEvent::Completed {
+                        session: session_for_task,
+                    });
+                }
             });
         }
         self.sessions.lock().await.insert(session.clone(), child);
