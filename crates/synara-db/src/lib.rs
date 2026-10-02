@@ -43,6 +43,8 @@ impl Database {
              );
              CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(sequence);
              CREATE INDEX IF NOT EXISTS idx_events_scope_entity ON events(scope,entity_id);
+             CREATE INDEX IF NOT EXISTS idx_tool_calls_turn ON tool_calls(turn_id);
+             CREATE INDEX IF NOT EXISTS idx_tool_calls_status ON tool_calls(status);
              CREATE TABLE IF NOT EXISTS projections(
                  key TEXT PRIMARY KEY,
                  value TEXT NOT NULL,
@@ -71,6 +73,15 @@ impl Database {
                  id TEXT PRIMARY KEY,
                  tool_call_id TEXT NOT NULL,
                  approved INTEGER,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS tool_calls(
+                 id TEXT PRIMARY KEY,
+                 turn_id TEXT,
+                 name TEXT NOT NULL,
+                 arguments_json TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
                  updated_sequence INTEGER NOT NULL
              );
              CREATE TABLE IF NOT EXISTS threads(
@@ -215,6 +226,29 @@ impl Database {
                 tx.execute(
                     "UPDATE turns SET status='failed', updated_sequence=? WHERE id=?",
                     params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "ProviderToolCall" => {
+                tx.execute(
+                    "INSERT INTO tool_calls(id,turn_id,name,arguments_json,status,created_sequence,updated_sequence)
+                     VALUES(
+                         ?,
+                         (SELECT id FROM turns
+                          WHERE thread_id=(
+                              SELECT thread_id FROM provider_sessions WHERE id=?
+                          ) AND status='running'
+                          ORDER BY created_sequence DESC LIMIT 1),
+                         ?,?,?,?,?
+                     )",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["session"].to_string().trim_matches('"'),
+                        e.payload["name"].as_str().unwrap_or_default(),
+                        e.payload["arguments"].to_string(),
+                        "pending",
+                        e.sequence,
+                        e.sequence
+                    ],
                 )?;
             }
             "ToolApproved" | "ToolRejected" => {
@@ -401,6 +435,52 @@ impl Database {
         Ok(self
             .conn
             .query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)
+    }
+
+    pub fn tool_call_count(&self) -> Result<u64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM tool_calls", [], |r| r.get(0))?)
+    }
+
+    pub fn tool_call_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tool_calls WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn list_tool_calls(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, Option<synara_core::EntityId>, String, String, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,turn_id,name,arguments_json,status,created_sequence
+             FROM tool_calls ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, u64>(5)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, turn_id, name, arguments, status, sequence) = row?;
+            out.push((
+                id.parse()?,
+                turn_id.map(|v| v.parse()).transpose()?,
+                name,
+                arguments,
+                status,
+                sequence,
+            ));
+        }
+        Ok(out)
     }
 
     pub fn approval_count(&self) -> Result<u64> {
