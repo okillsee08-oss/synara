@@ -91,6 +91,41 @@ pub struct StartTurnRequest {
     pub prompt: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateTaskRequest {
+    pub thread_id: EntityId,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSubagentRequest {
+    pub task_id: EntityId,
+    pub provider_kind: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FailTaskRequest {
+    pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskResponse {
+    pub id: EntityId,
+    pub thread_id: EntityId,
+    pub name: String,
+    pub status: String,
+    pub created_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubagentResponse {
+    pub id: EntityId,
+    pub task_id: EntityId,
+    pub provider_kind: Option<String>,
+    pub status: String,
+    pub created_sequence: u64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct StartTurnResponse {
     pub message_id: EntityId,
@@ -151,6 +186,13 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/threads", get(list_threads).post(create_thread))
         .route("/api/v1/messages", get(list_messages).post(send_message))
         .route("/api/v1/turns", post(start_turn))
+        .route("/api/v1/tasks", get(list_tasks).post(create_task))
+        .route("/api/v1/tasks/:id/start", post(start_task))
+        .route("/api/v1/tasks/:id/complete", post(complete_task))
+        .route("/api/v1/tasks/:id/cancel", post(cancel_task))
+        .route("/api/v1/tasks/:id/fail", post(fail_task))
+        .route("/api/v1/subagents", get(list_subagents).post(create_subagent))
+        .route("/api/v1/subagents/:id/stop", post(stop_subagent))
         .route("/ws", get(websocket))
         .layer(CorsLayer::permissive())
         .fallback_service(ServeDir::new(
@@ -350,6 +392,160 @@ async fn start_turn(
         turn_id,
         provider_session_id,
     }))
+}
+
+async fn list_tasks(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<TaskResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let tasks = guard
+        .db
+        .list_tasks()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(|(id, thread_id, name, status, created_sequence)| TaskResponse {
+            id,
+            thread_id,
+            name,
+            status,
+            created_sequence,
+        })
+        .collect();
+    Ok(Json(tasks))
+}
+
+async fn list_subagents(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<SubagentResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let subagents = guard
+        .db
+        .list_subagents()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(
+            |(id, task_id, provider_kind, status, created_sequence)| SubagentResponse {
+                id,
+                task_id,
+                provider_kind,
+                status,
+                created_sequence,
+            },
+        )
+        .collect();
+    Ok(Json(subagents))
+}
+
+async fn create_task(
+    State(s): State<ApiState>,
+    Json(req): Json<CreateTaskRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.name.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".into(),
+                message: "task name is required".into(),
+            }),
+        ));
+    }
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::CreateTask {
+            thread_id: req.thread_id,
+            name: req.name,
+        })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn create_subagent(
+    State(s): State<ApiState>,
+    Json(req): Json<CreateSubagentRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::CreateSubagent {
+            task_id: req.task_id,
+            provider_kind: req.provider_kind,
+        })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn start_task(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::StartTask { task_id: id })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn complete_task(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::CompleteTask { task_id: id })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn cancel_task(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::CancelTask { task_id: id })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn fail_task(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+    Json(req): Json<FailTaskRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.error.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".into(),
+                message: "error is required".into(),
+            }),
+        ));
+    }
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::FailTask {
+            task_id: id,
+            error: req.error,
+        })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn stop_subagent(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard
+        .dispatch(Command::StopSubagent { subagent_id: id })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
 }
 
 async fn list_projects(
