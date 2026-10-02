@@ -88,7 +88,6 @@ fn creates_parent_chain_before_children() {
         .unwrap();
 }
 
-
 #[test]
 fn task_and_subagent_lifecycle_is_durable() {
     let db = Database::open_memory().unwrap();

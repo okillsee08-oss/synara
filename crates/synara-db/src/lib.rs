@@ -443,7 +443,15 @@ impl Database {
 
     pub fn list_tasks(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, String, String, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            synara_core::EntityId,
+            String,
+            String,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,thread_id,name,status,created_sequence FROM tasks ORDER BY created_sequence",
         )?;
@@ -466,7 +474,15 @@ impl Database {
 
     pub fn list_subagents(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<String>, String, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            synara_core::EntityId,
+            Option<String>,
+            String,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,task_id,provider_kind,status,created_sequence FROM subagents ORDER BY created_sequence",
         )?;

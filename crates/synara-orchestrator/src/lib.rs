@@ -215,7 +215,10 @@ impl Orchestrator {
                 "TaskCancelled",
                 json!({ "task_id": task_id }),
             ),
-            Command::CreateSubagent { task_id, provider_kind } => {
+            Command::CreateSubagent {
+                task_id,
+                provider_kind,
+            } => {
                 let subagent_id = EntityId::new();
                 (
                     subagent_id,
