@@ -1,25 +1,30 @@
-# Synara Rust Rewrite
+# Synara Rust Rewrite Status
 
-The rust-rewrite branch contains the independent Rust implementation while main remains the behavioral reference.
+The `rust-rewrite` branch is an active replacement implementation. The TypeScript/Bun/Electron implementation on `main` remains the behavioral reference until Rust parity is validated.
 
 ## Implemented
-- Cargo workspace with dedicated core/domain/config/platform crates.
-- Durable event model and SQLite persistence with migrations and sequence replay.
-- Orchestration command path for project/thread/message/turn/tool approval lifecycle events.
-- Tokio runtime primitives and cancellation supervision.
-- Cross-platform process abstraction and terminal boundary.
-- Provider adapter registry with built-in provider metadata and process-backed adapters for Codex, Claude Agent, Cursor, Devin, Antigravity, Grok, Droid, OpenCode and Pi.
-- ACP and MCP protocol data boundaries.
-- Central security policy boundary for network, shell and filesystem operations.
-- Workspace-confined filesystem access.
+
+- Rust 2024 workspace with modular core, domain, configuration and platform boundaries.
+- Durable SQLite event store with WAL, migrations, event indexes and initial project/thread/message projections.
+- Durable orchestration command path for projects, threads, messages, turns and approvals.
+- Bounded provider runtime event channel and provider agent lifecycle boundary.
+- Provider registry and process-backed adapters for Codex, Claude Agent, Cursor, Devin, Antigravity, Grok, Droid, OpenCode and Pi.
+- Async ACP JSON-RPC process transport.
+- Async MCP stdio JSON-RPC transport.
+- Central security decisions for network, shell, filesystem and Git push.
+- Workspace-confined filesystem reads and writes.
 - Git repository/status and worktree boundaries.
-- Automation scheduler primitives.
-- Axum server/API foundation and typed transport/event-bus primitives.
-- Diagnostics, browser, computer-use and voice extension boundaries.
-- CLI command surface and runnable HTTP server.
+- Cross-platform PTY terminal boundary.
+- Automation/runtime/diagnostics foundations.
+- HTTP API for health, negotiation, event replay, project/thread/message commands and provider discovery.
+- WebSocket connection endpoint with protocol hello and ping/pong handling.
+- Tauri 2 desktop shell.
+- GPUI native shell.
+- CLI and headless server entry points.
+- Rust CI workflow for formatting, workspace compilation and tests.
 
-## Compatibility direction
-The Rust core is authoritative for durable orchestration. Provider-native protocols remain behind adapters; transport and UI are replaceable. The existing TypeScript/Bun/Electron tree remains intact until equivalent behavior is validated.
+## Still required for full parity
 
-## Verification
-The branch is structured as a Cargo workspace and includes the implementation layers needed for migration. Full dependency compilation and end-to-end parity validation requires a Cargo-enabled checkout or CI runner; GitHub file operations alone cannot execute Cargo locally.
+The rewrite is not yet feature-complete. Remaining work includes provider-native protocol parity and streaming ingestion, complete ACP/MCP capability negotiation and lifecycle semantics, full WebSocket snapshot/replay/fence recovery, complete persistence/projections, Git/worktree operations, terminal resize/streaming, automation persistence/recovery, browser/computer/voice implementations, migration of the existing React application, desktop supervision/native integrations, advanced Synara subsystems, cross-platform packaging, and comprehensive unit/integration/E2E acceptance coverage.
+
+The branch must not be described as a complete replacement until those behaviors are implemented and CI passes on the resulting head.
