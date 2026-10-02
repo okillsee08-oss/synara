@@ -81,7 +81,17 @@ impl Database {
                  role TEXT NOT NULL,
                  content TEXT NOT NULL,
                  created_sequence INTEGER NOT NULL
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS provider_sessions(
+                 id TEXT PRIMARY KEY,
+                 provider_kind TEXT NOT NULL,
+                 remote_thread_id TEXT,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_provider_sessions_status ON provider_sessions(status);
+             CREATE INDEX IF NOT EXISTS idx_provider_sessions_provider ON provider_sessions(provider_kind);",
         )?;
         Ok(())
     }
@@ -175,6 +185,32 @@ impl Database {
                     ],
                 )?;
             }
+            "ProviderSessionStarted" => {
+                tx.execute(
+                    "INSERT INTO provider_sessions(id,provider_kind,remote_thread_id,status,created_sequence,updated_sequence)
+                     VALUES(?,?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["provider_kind"].as_str().unwrap_or_default(),
+                        e.payload["remote_thread_id"].as_str(),
+                        "running",
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "ProviderCompleted" => {
+                tx.execute(
+                    "UPDATE provider_sessions SET status='completed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "ProviderFailed" => {
+                tx.execute(
+                    "UPDATE provider_sessions SET status='failed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
             "MessageCreated" => {
                 tx.execute(
                     "INSERT INTO messages(id,thread_id,role,content,created_sequence) VALUES(?,?,?,?,?)",
@@ -245,6 +281,14 @@ impl Database {
 
     pub fn message_count(&self) -> Result<u64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
+    }
+
+    pub fn provider_session_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM provider_sessions",
+            [],
+            |r| r.get(0),
+        )?)
     }
 
     pub fn projection(&self, key: &str) -> Result<Option<String>> {
