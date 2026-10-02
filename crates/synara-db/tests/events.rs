@@ -170,3 +170,67 @@ fn provider_output_becomes_assistant_message() {
     assert!(assistant.is_some());
     assert_eq!(assistant.unwrap().3, "hello world");
 }
+
+
+#[test]
+fn provider_tool_call_can_be_approved() {
+    let db = Database::open_memory().unwrap();
+    let session = EntityId::new();
+    let thread = EntityId::new();
+    let workspace = EntityId::new();
+    let project = EntityId::new();
+    let turn = EntityId::new();
+
+    db.append_event(&Event::new(
+        "project", project, "ProjectCreated",
+        json!({"name":"p","root_path":"/tmp/p"}), 1, 1
+    )).unwrap();
+    db.append_event(&Event::new(
+        "workspace", workspace, "WorkspaceCreated",
+        json!({"project_id":project,"root_path":"/tmp/p"}), 1, 2
+    )).unwrap();
+    db.append_event(&Event::new(
+        "thread", thread, "ThreadCreated",
+        json!({"workspace_id":workspace,"title":"t"}), 1, 3
+    )).unwrap();
+    db.append_event(&Event::new(
+        "turn", turn, "TurnStarted",
+        json!({"thread_id":thread,"turn_id":turn}), 1, 4
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider", session, "ProviderSessionStarted",
+        json!({"provider_kind":"test","session":session,"thread":thread}), 1, 5
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider",
+        EntityId::new(),
+        "ProviderToolCall",
+        json!({
+            "provider_kind":"test",
+            "session":session,
+            "name":"shell",
+            "arguments":{"command":"echo hi"}
+        }),
+        1,
+        6
+    )).unwrap();
+
+    let tools = db.list_tool_calls().unwrap();
+    assert_eq!(tools.len(), 1);
+    let tool_id = tools[0].0;
+
+    db.append_event(&Event::new(
+        "approval",
+        tool_id,
+        "ToolApproved",
+        json!({"tool_call_id":tool_id,"approved":true}),
+        1,
+        7
+    )).unwrap();
+
+    let tools = db.list_tool_calls().unwrap();
+    assert_eq!(tools[0].4, "approved");
+    let approvals = db.list_approvals().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0].2, Some(true));
+}
