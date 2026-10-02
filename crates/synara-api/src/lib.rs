@@ -12,6 +12,7 @@ use uuid::Uuid;
 use synara_core::EntityId;
 use synara_orchestrator::{Command, Orchestrator};
 use synara_protocol::{ApiError, Envelope, ReplayResponse, WsNegotiation, CURRENT_REVISION};
+use synara_providers::{ProviderMetadata, ProviderRegistry};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -19,6 +20,7 @@ pub struct ApiState {
     pub epoch: u64,
     pub server_instance_id: Arc<str>,
     pub orchestrator: Arc<Mutex<Orchestrator>>,
+    pub providers: Arc<ProviderRegistry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +66,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/health", get(health))
         .route("/ws/negotiate", get(negotiate))
         .route("/api/v1/events", get(events))
+        .route("/api/v1/providers", get(providers))
         .route("/api/v1/projects", post(create_project))
         .route("/api/v1/threads", post(create_thread))
         .route("/api/v1/messages", post(send_message))
@@ -112,6 +115,10 @@ async fn negotiate(
         server_instance_id: s.server_instance_id.to_string(),
         capabilities: vec!["replay".into(), "snapshot".into(), "websocket".into()],
     }))
+}
+
+async fn providers(State(s): State<ApiState>) -> Json<Vec<ProviderMetadata>> {
+    Json(s.providers.list())
 }
 
 async fn events(
