@@ -59,6 +59,22 @@ pub enum Command {
     StopSubagent {
         subagent_id: EntityId,
     },
+    CreateAutomation {
+        name: String,
+        action: String,
+        interval_seconds: u64,
+        retry_attempts: u32,
+        retry_delay_seconds: u64,
+    },
+    EnableAutomation {
+        automation_id: EntityId,
+    },
+    DisableAutomation {
+        automation_id: EntityId,
+    },
+    FireAutomation {
+        automation_id: EntityId,
+    },
     ApproveTool {
         tool_call_id: EntityId,
         approved: bool,
@@ -132,7 +148,15 @@ impl Orchestrator {
                     anyhow::bail!("subagent does not exist: {subagent_id}");
                 }
             }
-            Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
+            Command::EnableAutomation { automation_id }
+            | Command::DisableAutomation { automation_id }
+            | Command::FireAutomation { automation_id } => {
+                if !self.db.automation_exists(*automation_id)? {
+                    anyhow::bail!("automation does not exist: {automation_id}");
+                }
+            }
+            Command::CreateAutomation { .. }
+            | Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
         }
 
         let (id, scope, event_type, payload) = match command {
@@ -245,6 +269,47 @@ impl Orchestrator {
                 "subagent",
                 "SubagentStopped",
                 json!({ "subagent_id": subagent_id }),
+            ),
+            Command::CreateAutomation {
+                name,
+                action,
+                interval_seconds,
+                retry_attempts,
+                retry_delay_seconds,
+            } => {
+                let automation_id = EntityId::new();
+                (
+                    automation_id,
+                    "automation",
+                    "AutomationCreated",
+                    json!({
+                        "name": name,
+                        "action": action,
+                        "interval_seconds": interval_seconds,
+                        "enabled": true,
+                        "retry_attempts": retry_attempts,
+                        "retry_delay_seconds": retry_delay_seconds,
+                        "automation_id": automation_id,
+                    }),
+                )
+            }
+            Command::EnableAutomation { automation_id } => (
+                automation_id,
+                "automation",
+                "AutomationEnabled",
+                json!({ "automation_id": automation_id }),
+            ),
+            Command::DisableAutomation { automation_id } => (
+                automation_id,
+                "automation",
+                "AutomationDisabled",
+                json!({ "automation_id": automation_id }),
+            ),
+            Command::FireAutomation { automation_id } => (
+                automation_id,
+                "automation",
+                "AutomationFired",
+                json!({ "automation_id": automation_id }),
             ),
             Command::ApproveTool {
                 tool_call_id,
