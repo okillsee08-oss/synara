@@ -12,6 +12,8 @@ use tokio::sync::broadcast;
 pub struct ProviderMetadata {
     pub kind: String,
     pub display_name: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
