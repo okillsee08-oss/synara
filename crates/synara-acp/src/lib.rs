@@ -47,7 +47,12 @@ impl AcpSession {
             .with_context(|| format!("failed to spawn ACP provider {program}"))?;
         let stdin = child.stdin.take().context("ACP stdin unavailable")?;
         let stdout = child.stdout.take().context("ACP stdout unavailable")?;
-        Ok(Self { child, stdin, stdout: BufReader::new(stdout), next_id: 1 })
+        Ok(Self {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout),
+            next_id: 1,
+        })
     }
 
     pub async fn request(&mut self, method: &str, params: Value) -> Result<AcpResponse> {

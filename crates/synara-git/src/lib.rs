@@ -77,9 +77,7 @@ pub fn stage_all(path: impl AsRef<Path>) -> Result<()> {
 
 pub fn commit(path: impl AsRef<Path>, message: &str) -> Result<String> {
     let repo = open(path)?;
-    let signature = repo
-        .signature()
-        .context("Git identity is not configured")?;
+    let signature = repo.signature().context("Git identity is not configured")?;
     let mut index = repo.index()?;
     let tree_id = index.write_tree()?;
     let tree = repo.find_tree(tree_id)?;

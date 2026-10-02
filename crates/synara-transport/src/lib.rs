@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use serde::Serialize;
+use std::sync::Arc;
 use synara_protocol::Envelope;
 use tokio::sync::broadcast;
 

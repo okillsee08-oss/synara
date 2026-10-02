@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,9 +12,14 @@ pub fn confined(root: impl AsRef<Path>, candidate: impl AsRef<Path>) -> Result<P
     let resolved = if path.exists() {
         path.canonicalize()?
     } else {
-        let parent = path.parent().ok_or_else(|| anyhow::anyhow!("path has no parent"))?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("path has no parent"))?;
         let parent = parent.canonicalize()?;
-        parent.join(path.file_name().ok_or_else(|| anyhow::anyhow!("path has no filename"))?)
+        parent.join(
+            path.file_name()
+                .ok_or_else(|| anyhow::anyhow!("path has no filename"))?,
+        )
     };
     if !resolved.starts_with(&root) {
         bail!("path escapes workspace boundary")

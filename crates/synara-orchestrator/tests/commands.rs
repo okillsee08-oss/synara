@@ -6,10 +6,12 @@ fn commands_append_durable_events() {
     let db = Database::open_memory().unwrap();
     let mut orchestrator = Orchestrator::new(db).unwrap();
 
-    let id = orchestrator.dispatch(Command::CreateProject {
-        name: "demo".into(),
-        root_path: "/tmp/demo".into(),
-    }).unwrap();
+    let id = orchestrator
+        .dispatch(Command::CreateProject {
+            name: "demo".into(),
+            root_path: "/tmp/demo".into(),
+        })
+        .unwrap();
 
     assert_eq!(orchestrator.db.latest_sequence().unwrap(), 1);
     let events = orchestrator.db.events_after(0).unwrap();
@@ -17,31 +19,36 @@ fn commands_append_durable_events() {
     assert_eq!(events[0].event_type, "ProjectCreated");
 }
 
-
 #[test]
 fn rejects_children_of_missing_parents() {
     let db = Database::open_memory().unwrap();
     let mut orchestrator = Orchestrator::new(db).unwrap();
 
-    assert!(orchestrator
-        .dispatch(Command::CreateWorkspace {
-            project_id: synara_core::EntityId::new(),
-            root_path: "/tmp/ws".into(),
-        })
-        .is_err());
+    assert!(
+        orchestrator
+            .dispatch(Command::CreateWorkspace {
+                project_id: synara_core::EntityId::new(),
+                root_path: "/tmp/ws".into(),
+            })
+            .is_err()
+    );
 
-    assert!(orchestrator
-        .dispatch(Command::CreateThread {
-            workspace_id: synara_core::EntityId::new(),
-            title: None,
-        })
-        .is_err());
+    assert!(
+        orchestrator
+            .dispatch(Command::CreateThread {
+                workspace_id: synara_core::EntityId::new(),
+                title: None,
+            })
+            .is_err()
+    );
 
-    assert!(orchestrator
-        .dispatch(Command::StartTurn {
-            thread_id: synara_core::EntityId::new(),
-        })
-        .is_err());
+    assert!(
+        orchestrator
+            .dispatch(Command::StartTurn {
+                thread_id: synara_core::EntityId::new(),
+            })
+            .is_err()
+    );
 }
 
 #[test]

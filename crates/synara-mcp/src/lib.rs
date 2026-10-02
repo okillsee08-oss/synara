@@ -130,8 +130,8 @@ impl StdioClient {
                     continue;
                 }
 
-                let parsed: JsonRpcResponse = serde_json::from_value(value)
-                    .context("invalid MCP JSON-RPC response")?;
+                let parsed: JsonRpcResponse =
+                    serde_json::from_value(value).context("invalid MCP JSON-RPC response")?;
                 if parsed.jsonrpc != "2.0" {
                     anyhow::bail!("unsupported JSON-RPC version: {}", parsed.jsonrpc);
                 }

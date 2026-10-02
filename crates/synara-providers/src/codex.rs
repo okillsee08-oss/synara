@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
-    sync::{broadcast, Mutex},
+    sync::{Mutex, broadcast},
 };
 use uuid::Uuid;
 
@@ -113,13 +113,15 @@ impl ProviderAdapter for CodexProvider {
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
                     if value.get("type").and_then(Value::as_str) == Some("thread.started") {
                         if let Some(thread_id) = value.get("thread_id").and_then(Value::as_str) {
-                            parser_state.lock().await.remote_thread_id = Some(thread_id.to_string());
+                            parser_state.lock().await.remote_thread_id =
+                                Some(thread_id.to_string());
                         }
                     }
                     if let Some(event) = parse_codex_event(&session_id, &value) {
                         let terminal = matches!(
                             event,
-                            ProviderRuntimeEvent::Completed { .. } | ProviderRuntimeEvent::Failed { .. }
+                            ProviderRuntimeEvent::Completed { .. }
+                                | ProviderRuntimeEvent::Failed { .. }
                         );
                         if terminal {
                             let mut state = parser_state.lock().await;
@@ -214,30 +216,27 @@ impl ProviderAdapter for CodexProvider {
     }
 }
 
-fn parse_codex_event(
-    session_id: &str,
-    value: &Value,
-) -> Option<ProviderRuntimeEvent> {
+fn parse_codex_event(session_id: &str, value: &Value) -> Option<ProviderRuntimeEvent> {
     match value.get("type").and_then(Value::as_str)? {
         "thread.started" => None,
         "item.completed" => {
             let item = value.get("item")?;
             match item.get("type").and_then(Value::as_str) {
-                Some("agent_message") => item
-                    .get("text")
-                    .and_then(Value::as_str)
-                    .map(|text| ProviderRuntimeEvent::TextDelta {
+                Some("agent_message") => item.get("text").and_then(Value::as_str).map(|text| {
+                    ProviderRuntimeEvent::TextDelta {
                         session: session_id.to_string(),
                         text: text.to_string(),
-                    }),
-                Some("command_execution") => item
-                    .get("command")
-                    .and_then(Value::as_str)
-                    .map(|command| ProviderRuntimeEvent::ToolCall {
-                        session: session_id.to_string(),
-                        name: "command_execution".into(),
-                        arguments: serde_json::json!({ "command": command }),
-                    }),
+                    }
+                }),
+                Some("command_execution") => {
+                    item.get("command").and_then(Value::as_str).map(|command| {
+                        ProviderRuntimeEvent::ToolCall {
+                            session: session_id.to_string(),
+                            name: "command_execution".into(),
+                            arguments: serde_json::json!({ "command": command }),
+                        }
+                    })
+                }
                 _ => None,
             }
         }

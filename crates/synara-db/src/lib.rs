@@ -1,9 +1,11 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::Path;
 use synara_events::Event;
 
-pub struct Database { conn: Connection }
+pub struct Database {
+    conn: Connection,
+}
 
 impl Database {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -14,7 +16,9 @@ impl Database {
     }
 
     pub fn open_memory() -> Result<Self> {
-        let db = Self { conn: Connection::open_in_memory()? };
+        let db = Self {
+            conn: Connection::open_in_memory()?,
+        };
         db.migrate()?;
         Ok(db)
     }
@@ -102,8 +106,10 @@ impl Database {
             |r| r.get(0),
         )?;
         if has_provider_thread_id == 0 {
-            self.conn
-                .execute("ALTER TABLE provider_sessions ADD COLUMN thread_id TEXT", [])?;
+            self.conn.execute(
+                "ALTER TABLE provider_sessions ADD COLUMN thread_id TEXT",
+                [],
+            )?;
         }
 
         Ok(())
@@ -112,11 +118,10 @@ impl Database {
     pub fn append_event(&self, e: &Event) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
 
-        let latest: u64 = tx.query_row(
-            "SELECT COALESCE(MAX(sequence),0) FROM events",
-            [],
-            |r| r.get(0),
-        )?;
+        let latest: u64 =
+            tx.query_row("SELECT COALESCE(MAX(sequence),0) FROM events", [], |r| {
+                r.get(0)
+            })?;
         if e.sequence != latest + 1 {
             anyhow::bail!(
                 "event sequence fence violated: expected {}, got {}",
@@ -269,9 +274,14 @@ impl Database {
         )?;
         let rows = stmt.query_map([seq], |r| {
             Ok((
-                r.get::<_, String>(0)?, r.get::<_, u64>(1)?, r.get::<_, String>(2)?,
-                r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?,
-                r.get::<_, u32>(6)?, r.get::<_, String>(7)?,
+                r.get::<_, String>(0)?,
+                r.get::<_, u64>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, u32>(6)?,
+                r.get::<_, String>(7)?,
             ))
         })?;
         let mut out = Vec::new();
@@ -292,37 +302,47 @@ impl Database {
     }
 
     pub fn project_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?)
     }
 
     pub fn thread_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
     }
 
     pub fn workspace_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)
     }
 
     pub fn turn_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)
     }
 
     pub fn approval_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)
     }
 
     pub fn message_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
     }
 
     pub fn provider_session_count(&self) -> Result<u64> {
-        Ok(self.conn.query_row(
-            "SELECT COUNT(*) FROM provider_sessions",
-            [],
-            |r| r.get(0),
-        )?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM provider_sessions", [], |r| r.get(0))?)
     }
-    
+
     pub fn project_exists(&self, id: synara_core::EntityId) -> Result<bool> {
         Ok(self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM projects WHERE id=?)",
@@ -400,19 +420,21 @@ impl Database {
         let mut out = Vec::new();
         for row in rows {
             let (id, project_id, root_path, sequence) = row?;
-            out.push((
-                id.parse()?,
-                project_id.parse()?,
-                root_path,
-                sequence,
-            ));
+            out.push((id.parse()?, project_id.parse()?, root_path, sequence));
         }
         Ok(out)
     }
 
     pub fn list_threads(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<String>, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            synara_core::EntityId,
+            Option<String>,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,workspace_id,title,created_sequence FROM threads ORDER BY created_sequence",
         )?;
@@ -434,7 +456,15 @@ impl Database {
 
     pub fn list_messages(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, String, String, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            synara_core::EntityId,
+            String,
+            String,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,thread_id,role,content,created_sequence FROM messages ORDER BY created_sequence",
         )?;
@@ -456,7 +486,9 @@ impl Database {
     }
 
     pub fn projection(&self, key: &str) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare("SELECT value FROM projections WHERE key=?")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM projections WHERE key=?")?;
         let mut rows = stmt.query([key])?;
         Ok(rows.next()?.map(|row| row.get(0)).transpose()?)
     }
@@ -471,6 +503,10 @@ impl Database {
     }
 
     pub fn latest_sequence(&self) -> Result<u64> {
-        Ok(self.conn.query_row("SELECT COALESCE(MAX(sequence),0) FROM events", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COALESCE(MAX(sequence),0) FROM events", [], |r| {
+                r.get(0)
+            })?)
     }
 }

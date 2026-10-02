@@ -1,2 +1,19 @@
-use anyhow::Result;use git2::Repository;use std::path::{Path,PathBuf};
-pub fn create(repo:impl AsRef<Path>,path:impl AsRef<Path>,branch:&str)->Result<PathBuf>{let r=Repository::discover(repo)?;let reference=r.find_reference(&format!("refs/heads/{branch}"))?;let commit=reference.peel_to_commit()?;let wt=r.worktree(path.as_ref().file_name().unwrap().to_string_lossy().as_ref(),path.as_ref(),None)?;let _=commit;Ok(wt.path().to_path_buf())}
+use anyhow::Result;
+use git2::Repository;
+use std::path::{Path, PathBuf};
+pub fn create(repo: impl AsRef<Path>, path: impl AsRef<Path>, branch: &str) -> Result<PathBuf> {
+    let r = Repository::discover(repo)?;
+    let reference = r.find_reference(&format!("refs/heads/{branch}"))?;
+    let commit = reference.peel_to_commit()?;
+    let wt = r.worktree(
+        path.as_ref()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref(),
+        path.as_ref(),
+        None,
+    )?;
+    let _ = commit;
+    Ok(wt.path().to_path_buf())
+}

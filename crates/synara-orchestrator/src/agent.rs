@@ -1,6 +1,6 @@
 use anyhow::Result;
-use tokio::sync::mpsc;
 use synara_providers::{ProviderAdapter, ProviderRuntimeEvent};
+use tokio::sync::mpsc;
 
 pub struct AgentRuntime {
     events: mpsc::Sender<ProviderRuntimeEvent>,
@@ -26,20 +26,19 @@ impl AgentRuntime {
     ) -> Result<String> {
         let session = adapter.start_session(thread_id).await?;
         if let Err(error) = adapter.send_turn(&session, prompt).await {
-            let _ = self.events.send(ProviderRuntimeEvent::Failed {
-                session: session.clone(),
-                error: error.to_string(),
-            }).await;
+            let _ = self
+                .events
+                .send(ProviderRuntimeEvent::Failed {
+                    session: session.clone(),
+                    error: error.to_string(),
+                })
+                .await;
             return Err(error);
         }
         Ok(session)
     }
 
-    pub async fn interrupt<A: ProviderAdapter>(
-        &self,
-        adapter: &A,
-        session: &str,
-    ) -> Result<()> {
+    pub async fn interrupt<A: ProviderAdapter>(&self, adapter: &A, session: &str) -> Result<()> {
         adapter.interrupt(session).await?;
         Ok(())
     }

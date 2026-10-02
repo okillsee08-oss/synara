@@ -1,8 +1,8 @@
 use axum::{
+    Json, Router,
     extract::{Query, State, WebSocketUpgrade},
     response::Response,
     routing::{get, post},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -12,7 +12,10 @@ use uuid::Uuid;
 
 use synara_core::EntityId;
 use synara_orchestrator::{Command, Orchestrator};
-use synara_protocol::{negotiate_revision, ApiError, Envelope, ReplayResponse, WsNegotiation, CURRENT_REVISION, SERVER_CAPABILITIES};
+use synara_protocol::{
+    ApiError, CURRENT_REVISION, Envelope, ReplayResponse, SERVER_CAPABILITIES, WsNegotiation,
+    negotiate_revision,
+};
 use synara_providers::{ProviderMetadata, ProviderRegistry};
 use synara_transport::EventBus;
 
@@ -133,7 +136,6 @@ pub struct MessageResponse {
     pub created_sequence: u64,
 }
 
-
 pub fn router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -142,7 +144,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/providers", get(providers))
         .route("/api/v1/summary", get(summary))
         .route("/api/v1/projects", get(list_projects).post(create_project))
-        .route("/api/v1/workspaces", get(list_workspaces).post(create_workspace))
+        .route(
+            "/api/v1/workspaces",
+            get(list_workspaces).post(create_workspace),
+        )
         .route("/api/v1/threads", get(list_threads).post(create_thread))
         .route("/api/v1/messages", get(list_messages).post(send_message))
         .route("/api/v1/turns", post(start_turn))
@@ -181,7 +186,10 @@ async fn negotiate(
         };
         (
             axum::http::StatusCode::UPGRADE_REQUIRED,
-            Json(ApiError { code: code.into(), message: message.into() }),
+            Json(ApiError {
+                code: code.into(),
+                message: message.into(),
+            }),
         )
     })?;
     if let Some(epoch) = q.epoch {
@@ -210,7 +218,10 @@ async fn negotiate(
         epoch: s.epoch,
         negotiated_revision,
         server_instance_id: s.server_instance_id.to_string(),
-        capabilities: SERVER_CAPABILITIES.iter().map(|v| (*v).to_string()).collect(),
+        capabilities: SERVER_CAPABILITIES
+            .iter()
+            .map(|v| (*v).to_string())
+            .collect(),
     }))
 }
 
@@ -243,11 +254,14 @@ async fn events(
     let guard = s.orchestrator.lock().await;
     let latest = guard.db.latest_sequence().map_err(internal_error)?;
     let stored = guard.db.events_after(q.after).map_err(internal_error)?;
-    let events = stored.into_iter().map(|e| Envelope {
-        revision: e.version,
-        sequence: e.sequence,
-        payload: e.payload,
-    }).collect();
+    let events = stored
+        .into_iter()
+        .map(|e| Envelope {
+            revision: e.version,
+            sequence: e.sequence,
+            payload: e.payload,
+        })
+        .collect();
     Ok(Json(ReplayResponse {
         epoch: s.epoch,
         revision: CURRENT_REVISION,
@@ -366,12 +380,14 @@ async fn list_workspaces(
         .list_workspaces()
         .map_err(internal_error)?
         .into_iter()
-        .map(|(id, project_id, root_path, created_sequence)| WorkspaceResponse {
-            id,
-            project_id,
-            root_path,
-            created_sequence,
-        })
+        .map(
+            |(id, project_id, root_path, created_sequence)| WorkspaceResponse {
+                id,
+                project_id,
+                root_path,
+                created_sequence,
+            },
+        )
         .collect();
     Ok(Json(workspaces))
 }
@@ -385,12 +401,14 @@ async fn list_threads(
         .list_threads()
         .map_err(internal_error)?
         .into_iter()
-        .map(|(id, workspace_id, title, created_sequence)| ThreadResponse {
-            id,
-            workspace_id,
-            title,
-            created_sequence,
-        })
+        .map(
+            |(id, workspace_id, title, created_sequence)| ThreadResponse {
+                id,
+                workspace_id,
+                title,
+                created_sequence,
+            },
+        )
         .collect();
     Ok(Json(threads))
 }
@@ -404,13 +422,15 @@ async fn list_messages(
         .list_messages()
         .map_err(internal_error)?
         .into_iter()
-        .map(|(id, thread_id, role, content, created_sequence)| MessageResponse {
-            id,
-            thread_id,
-            role,
-            content,
-            created_sequence,
-        })
+        .map(
+            |(id, thread_id, role, content, created_sequence)| MessageResponse {
+                id,
+                thread_id,
+                role,
+                content,
+                created_sequence,
+            },
+        )
         .collect();
     Ok(Json(messages))
 }
@@ -429,10 +449,12 @@ async fn create_project(
         ));
     }
     let mut guard = s.orchestrator.lock().await;
-    let id = guard.dispatch(Command::CreateProject {
-        name: req.name,
-        root_path: req.root_path,
-    }).map_err(internal_error)?;
+    let id = guard
+        .dispatch(Command::CreateProject {
+            name: req.name,
+            root_path: req.root_path,
+        })
+        .map_err(internal_error)?;
     publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
@@ -451,10 +473,12 @@ async fn create_workspace(
         ));
     }
     let mut guard = s.orchestrator.lock().await;
-    let id = guard.dispatch(Command::CreateWorkspace {
-        project_id: req.project_id,
-        root_path: req.root_path,
-    }).map_err(internal_error)?;
+    let id = guard
+        .dispatch(Command::CreateWorkspace {
+            project_id: req.project_id,
+            root_path: req.root_path,
+        })
+        .map_err(internal_error)?;
     publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
@@ -464,10 +488,12 @@ async fn create_thread(
     Json(req): Json<CreateThreadRequest>,
 ) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
     let mut guard = s.orchestrator.lock().await;
-    let id = guard.dispatch(Command::CreateThread {
-        workspace_id: req.workspace_id,
-        title: req.title,
-    }).map_err(internal_error)?;
+    let id = guard
+        .dispatch(Command::CreateThread {
+            workspace_id: req.workspace_id,
+            title: req.title,
+        })
+        .map_err(internal_error)?;
     publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
@@ -486,10 +512,12 @@ async fn send_message(
         ));
     }
     let mut guard = s.orchestrator.lock().await;
-    let id = guard.dispatch(Command::SendMessage {
-        thread_id: req.thread_id,
-        content: req.content,
-    }).map_err(internal_error)?;
+    let id = guard
+        .dispatch(Command::SendMessage {
+            thread_id: req.thread_id,
+            content: req.content,
+        })
+        .map_err(internal_error)?;
     publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
@@ -515,8 +543,12 @@ async fn websocket(
     Query(q): Query<WebSocketQuery>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, (axum::http::StatusCode, Json<ApiError>)> {
-    let client_min = q.min_revision.unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
-    let client_max = q.max_revision.unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
+    let client_min = q
+        .min_revision
+        .unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
+    let client_max = q
+        .max_revision
+        .unwrap_or(q.revision.unwrap_or(CURRENT_REVISION));
     let negotiated_revision = negotiate_revision(client_min, client_max).map_err(|error| {
         let (code, message) = match error {
             synara_protocol::RevisionNegotiationError::InvalidRange => (
@@ -530,7 +562,10 @@ async fn websocket(
         };
         (
             axum::http::StatusCode::UPGRADE_REQUIRED,
-            Json(ApiError { code: code.into(), message: message.into() }),
+            Json(ApiError {
+                code: code.into(),
+                message: message.into(),
+            }),
         )
     })?;
     if let Some(epoch) = q.epoch {
@@ -671,10 +706,14 @@ fn internal_error(error: anyhow::Error) -> (axum::http::StatusCode, Json<ApiErro
     )
 }
 
-
 fn publish_latest(s: &ApiState, guard: &Orchestrator) -> anyhow::Result<()> {
     let latest = guard.db.latest_sequence()?;
-    if let Some(event) = guard.db.events_after(latest.saturating_sub(1))?.into_iter().find(|e| e.sequence == latest) {
+    if let Some(event) = guard
+        .db
+        .events_after(latest.saturating_sub(1))?
+        .into_iter()
+        .find(|e| e.sequence == latest)
+    {
         s.events.publish(Envelope {
             revision: event.version,
             sequence: event.sequence,

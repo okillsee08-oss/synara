@@ -4,11 +4,7 @@ pub const MIN_SUPPORTED_REVISION: u32 = 1;
 pub const MAX_SUPPORTED_REVISION: u32 = 1;
 pub const CURRENT_REVISION: u32 = MAX_SUPPORTED_REVISION;
 
-pub const SERVER_CAPABILITIES: &[&str] = &[
-    "replay",
-    "snapshot",
-    "websocket",
-];
+pub const SERVER_CAPABILITIES: &[&str] = &["replay", "snapshot", "websocket"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WsNegotiation {

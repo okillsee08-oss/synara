@@ -1,11 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use std::{collections::HashMap, sync::Arc};
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt, BufReader}, sync::{broadcast, Mutex}};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    sync::{Mutex, broadcast},
+};
 use uuid::Uuid;
 
-use synara_process::{ManagedProcess, ProcessSpec};
 use super::{ProviderAdapter, ProviderMetadata, ProviderRuntimeEvent};
+use synara_process::{ManagedProcess, ProcessSpec};
 
 pub struct CliProvider {
     meta: ProviderMetadata,
@@ -18,7 +21,10 @@ impl CliProvider {
     pub fn new(kind: &str, name: &str, program: &str) -> Self {
         let (events, _) = broadcast::channel(256);
         Self {
-            meta: ProviderMetadata { kind: kind.into(), display_name: name.into() },
+            meta: ProviderMetadata {
+                kind: kind.into(),
+                display_name: name.into(),
+            },
             program: program.into(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             events,
@@ -32,7 +38,9 @@ impl CliProvider {
 
 #[async_trait]
 impl ProviderAdapter for CliProvider {
-    fn metadata(&self) -> ProviderMetadata { self.meta.clone() }
+    fn metadata(&self) -> ProviderMetadata {
+        self.meta.clone()
+    }
 
     async fn start_session(&self, thread: &str) -> Result<String> {
         let spec = ProcessSpec {
@@ -52,9 +60,14 @@ impl ProviderAdapter for CliProvider {
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    let _ = events.send(ProviderRuntimeEvent::TextDelta { session: session_for_task.clone(), text: line });
+                    let _ = events.send(ProviderRuntimeEvent::TextDelta {
+                        session: session_for_task.clone(),
+                        text: line,
+                    });
                 }
-                let _ = events.send(ProviderRuntimeEvent::Completed { session: session_for_task });
+                let _ = events.send(ProviderRuntimeEvent::Completed {
+                    session: session_for_task,
+                });
             });
         }
         self.sessions.lock().await.insert(session.clone(), child);
@@ -80,7 +93,9 @@ impl ProviderAdapter for CliProvider {
     async fn interrupt(&self, session: &str) -> Result<()> {
         if let Some(mut process) = self.remove_session(session).await {
             process.terminate().await?;
-            let _ = self.events.send(ProviderRuntimeEvent::Completed { session: session.to_string() });
+            let _ = self.events.send(ProviderRuntimeEvent::Completed {
+                session: session.to_string(),
+            });
         }
         Ok(())
     }
@@ -89,7 +104,6 @@ impl ProviderAdapter for CliProvider {
         Some(self.events.subscribe())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

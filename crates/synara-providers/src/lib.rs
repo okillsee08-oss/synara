@@ -78,7 +78,10 @@ impl ProviderRegistry {
     }
 
     pub fn list(&self) -> Vec<ProviderMetadata> {
-        self.adapters.iter().map(|adapter| adapter.metadata()).collect()
+        self.adapters
+            .iter()
+            .map(|adapter| adapter.metadata())
+            .collect()
     }
 
     pub fn subscribe_all(
@@ -96,14 +99,24 @@ impl ProviderRegistry {
 
     pub fn register_builtins(&mut self) {
         self.register(codex::CodexProvider::new());
-        self.register(process::CliProvider::new("claudeAgent", "Claude Agent", "claude"));
-        self.register(process::CliProvider::new("opencode", "OpenCode", "opencode"));
+        self.register(process::CliProvider::new(
+            "claudeAgent",
+            "Claude Agent",
+            "claude",
+        ));
+        self.register(process::CliProvider::new(
+            "opencode", "OpenCode", "opencode",
+        ));
         self.register(process::CliProvider::new("pi", "Pi", "pi"));
         self.register(process::CliProvider::new("cursor", "Cursor", "cursor"));
         self.register(process::CliProvider::new("devin", "Devin", "devin"));
         self.register(process::CliProvider::new("grok", "Grok", "grok"));
         self.register(process::CliProvider::new("droid", "Droid", "droid"));
-        self.register(process::CliProvider::new("antigravity", "Antigravity", "antigravity"));
+        self.register(process::CliProvider::new(
+            "antigravity",
+            "Antigravity",
+            "antigravity",
+        ));
     }
 }
 

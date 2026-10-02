@@ -9,7 +9,11 @@ fn status_api_is_constructible() {
     std::fs::write(&path, "test").unwrap();
 
     let changes = synara_git::status(&root).unwrap();
-    assert!(changes.iter().any(|change| change.path == std::path::PathBuf::from("README.md")));
+    assert!(
+        changes
+            .iter()
+            .any(|change| change.path == std::path::PathBuf::from("README.md"))
+    );
 
     drop(repo);
     let _ = std::fs::remove_dir_all(&root);

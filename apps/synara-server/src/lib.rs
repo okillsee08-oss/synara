@@ -1,12 +1,12 @@
 use anyhow::Result;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
-use synara_api::{router, ApiState};
+use synara_api::{ApiState, router};
 use synara_db::Database;
 use synara_diagnostics::init;
 use synara_orchestrator::Orchestrator;
 use synara_providers::ProviderRegistry;
 use synara_transport::EventBus;
+use tokio::sync::Mutex;
 
 pub async fn run() -> Result<()> {
     init();
