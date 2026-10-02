@@ -8,6 +8,7 @@ build="build.rs"
 [dependencies]
 tauri={version="2.12",default-features=false,features=["wry"]}
 serde_json.workspace=true
+synara-server={path="../synara-server"}
 
 [build-dependencies]
 tauri-build={version="2.7",features=[]}
