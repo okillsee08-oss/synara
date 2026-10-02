@@ -32,16 +32,6 @@ impl CodexProvider {
             events,
         }
     }
-
-    fn emit_from_json(
-        &self,
-        session_id: &str,
-        line: &str,
-        state: &Arc<Mutex<SessionState>>,
-    ) -> Option<ProviderRuntimeEvent> {
-        let value: Value = serde_json::from_str(line).ok()?;
-        parse_codex_event(session_id, &value, state)
-    }
 }
 
 #[async_trait]
@@ -228,7 +218,7 @@ fn parse_codex_event(
     value: &Value,
 ) -> Option<ProviderRuntimeEvent> {
     match value.get("type").and_then(Value::as_str)? {
-        "thread.started" => None
+        "thread.started" => None,
         "item.completed" => {
             let item = value.get("item")?;
             match item.get("type").and_then(Value::as_str) {
@@ -283,8 +273,8 @@ fn parse_codex_event(
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn parses_agent_message() {
+    #[test]
+    fn parses_agent_message() {
         let (_tx, _rx) = broadcast::channel(8);
         let state = Arc::new(Mutex::new(SessionState {
             remote_thread_id: None,
@@ -298,7 +288,6 @@ mod tests {
                 "type": "item.completed",
                 "item": {"type": "agent_message", "text": "hello"}
             }),
-            &state,
         );
         assert!(matches!(
             event,
@@ -306,8 +295,8 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn parses_turn_failure() {
+    #[test]
+    fn parses_turn_failure() {
         let state = Arc::new(Mutex::new(SessionState {
             remote_thread_id: None,
             process: None,
