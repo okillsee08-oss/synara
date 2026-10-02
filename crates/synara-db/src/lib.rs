@@ -87,7 +87,22 @@ impl Database {
     }
 
     pub fn append_event(&self, e: &Event) -> Result<()> {
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+
+        let latest: u64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0) FROM events",
+            [],
+            |r| r.get(0),
+        )?;
+        if e.sequence != latest + 1 {
+            anyhow::bail!(
+                "event sequence fence violated: expected {}, got {}",
+                latest + 1,
+                e.sequence
+            );
+        }
+
+        tx.execute(
             "INSERT INTO events(event_id,sequence,timestamp,scope,entity_id,event_type,version,payload)
              VALUES(?,?,?,?,?,?,?,?)",
             params![
@@ -98,7 +113,7 @@ impl Database {
 
         match e.event_type.as_str() {
             "ProjectCreated" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO projects(id,name,root_path,created_sequence) VALUES(?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
@@ -109,7 +124,7 @@ impl Database {
                 )?;
             }
             "WorkspaceCreated" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO workspaces(id,project_id,root_path,created_sequence) VALUES(?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
@@ -120,7 +135,7 @@ impl Database {
                 )?;
             }
             "ThreadCreated" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO threads(id,workspace_id,title,created_sequence) VALUES(?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
@@ -131,7 +146,7 @@ impl Database {
                 )?;
             }
             "TurnStarted" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO turns(id,thread_id,status,created_sequence,updated_sequence) VALUES(?,?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
@@ -143,13 +158,13 @@ impl Database {
                 )?;
             }
             "TurnStopped" => {
-                self.conn.execute(
+                tx.execute(
                     "UPDATE turns SET status='cancelled', updated_sequence=? WHERE id=?",
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
             "ToolApproved" | "ToolRejected" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO approvals(id,tool_call_id,approved,updated_sequence) VALUES(?,?,?,?)
                      ON CONFLICT(id) DO UPDATE SET approved=excluded.approved,updated_sequence=excluded.updated_sequence",
                     params![
@@ -161,7 +176,7 @@ impl Database {
                 )?;
             }
             "MessageCreated" => {
-                self.conn.execute(
+                tx.execute(
                     "INSERT INTO messages(id,thread_id,role,content,created_sequence) VALUES(?,?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
@@ -174,6 +189,8 @@ impl Database {
             }
             _ => {}
         }
+
+        tx.commit()?;
         Ok(())
     }
 
