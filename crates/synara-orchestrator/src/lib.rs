@@ -9,7 +9,8 @@ use synara_events::Event;
 #[derive(Debug)]
 pub enum Command {
     CreateProject { name: String, root_path: String },
-    CreateThread { workspace_id: EntityId, title: Option<String> },
+    CreateWorkspace { project_id: EntityId, root_path: String },
+    CreateThread { workspace_id: EntityId, title: Option<String },
     SendMessage { thread_id: EntityId, content: String },
     StartTurn { thread_id: EntityId },
     StopTurn { turn_id: EntityId },
@@ -32,6 +33,10 @@ impl Orchestrator {
             Command::CreateProject { name, root_path } => (
                 EntityId::new(), "project", "ProjectCreated",
                 json!({ "name": name, "root_path": root_path }),
+            ),
+            Command::CreateWorkspace { project_id, root_path } => (
+                EntityId::new(), "workspace", "WorkspaceCreated",
+                json!({ "project_id": project_id, "root_path": root_path }),
             ),
             Command::CreateThread { workspace_id, title } => (
                 EntityId::new(), "thread", "ThreadCreated",
