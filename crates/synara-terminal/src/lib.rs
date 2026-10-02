@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct Terminal {
     child: Box<dyn portable_pty::Child + Send>,
+    master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     reader: Arc<Mutex<Box<dyn Read + Send>>>,
 }
@@ -26,6 +27,7 @@ impl Terminal {
 
         Ok(Self {
             child,
+            master: Arc::new(Mutex::new(pair.master)),
             writer: Arc::new(Mutex::new(writer)),
             reader: Arc::new(Mutex::new(reader)),
         })
@@ -41,10 +43,10 @@ impl Terminal {
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<()> {
-        // portable-pty exposes resize on the master pair; sessions created here
-        // keep a stable PTY size and callers can recreate or extend this boundary
-        // when window-management integration is attached.
-        let _ = (cols, rows);
+        self.master
+            .lock()
+            .map_err(|_| anyhow::anyhow!("terminal master poisoned"))?
+            .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })?;
         Ok(())
     }
 
