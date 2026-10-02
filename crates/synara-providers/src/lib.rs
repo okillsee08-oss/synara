@@ -18,6 +18,7 @@ pub struct ProviderMetadata {
 pub enum ProviderRuntimeEvent {
     Started {
         session: String,
+        thread: String,
     },
     TextDelta {
         session: String,
