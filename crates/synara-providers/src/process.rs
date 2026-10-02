@@ -24,6 +24,7 @@ impl CliProvider {
             meta: ProviderMetadata {
                 kind: kind.into(),
                 display_name: name.into(),
+                capabilities: vec!["streaming".into(), "stdin".into()],
             },
             program: program.into(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
