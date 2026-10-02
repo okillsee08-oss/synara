@@ -275,13 +275,6 @@ mod tests {
 
     #[test]
     fn parses_agent_message() {
-        let (_tx, _rx) = broadcast::channel(8);
-        let state = Arc::new(Mutex::new(SessionState {
-            remote_thread_id: None,
-            process: None,
-            running: true,
-            terminal_sent: false,
-        }));
         let event = parse_codex_event(
             "session",
             &serde_json::json!({
@@ -297,12 +290,6 @@ mod tests {
 
     #[test]
     fn parses_turn_failure() {
-        let state = Arc::new(Mutex::new(SessionState {
-            remote_thread_id: None,
-            process: None,
-            running: true,
-            terminal_sent: false,
-        }));
         let event = parse_codex_event(
             "session",
             &serde_json::json!({
