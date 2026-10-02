@@ -92,3 +92,53 @@ pub fn commit(path: impl AsRef<Path>, message: &str) -> Result<String> {
     )?;
     Ok(commit.to_string())
 }
+
+
+#[derive(Debug, Clone)]
+pub struct CommitSummary {
+    pub id: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: i64,
+}
+
+pub fn current_branch(path: impl AsRef<Path>) -> Result<Option<String>> {
+    let repo = open(path)?;
+    Ok(repo.head()?.shorthand().map(str::to_owned))
+}
+
+pub fn head_commit(path: impl AsRef<Path>) -> Result<String> {
+    let repo = open(path)?;
+    Ok(repo.head()?.peel_to_commit()?.id().to_string())
+}
+
+pub fn recent_commits(path: impl AsRef<Path>, limit: usize) -> Result<Vec<CommitSummary>> {
+    let repo = open(path)?;
+    let mut walk = repo.revwalk()?;
+    walk.push_head()?;
+    walk.set_sorting(git2::Sort::TIME)?;
+    let mut commits = Vec::new();
+    for oid in walk.take(limit) {
+        let commit = repo.find_commit(oid?)?;
+        commits.push(CommitSummary {
+            id: commit.id().to_string(),
+            message: commit.summary().unwrap_or_default().to_string(),
+            author: commit.author().name().unwrap_or_default().to_string(),
+            timestamp: commit.time().seconds(),
+        });
+    }
+    Ok(commits)
+}
+
+pub fn diff(path: impl AsRef<Path>) -> Result<String> {
+    let repo = open(path)?;
+    let mut options = git2::DiffOptions::new();
+    options.include_untracked(true);
+    let diff = repo.diff_index_to_workdir(None, Some(&mut options))?;
+    let mut output = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        output.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+        true
+    })?;
+    Ok(output)
+}
