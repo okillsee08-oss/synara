@@ -239,6 +239,26 @@ impl Database {
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
+            "ProviderTextDelta" => {
+                let key = format!("provider_output:{}", e.entity_id);
+                let previous = tx
+                    .query_row(
+                        "SELECT value FROM projections WHERE key=?",
+                        [&key],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()?
+                    .unwrap_or_default();
+                let text = format!(
+                    "{previous}{}",
+                    e.payload["text"].as_str().unwrap_or_default()
+                );
+                tx.execute(
+                    "INSERT INTO projections(key,value,updated_sequence) VALUES(?,?,?)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_sequence=excluded.sequence",
+                    params![key, text, e.sequence],
+                )?;
+            }
             "ProviderToolCall" => {
                 tx.execute(
                     "INSERT INTO tool_calls(id,turn_id,name,arguments_json,status,created_sequence,updated_sequence)
@@ -396,6 +416,43 @@ impl Database {
                     "UPDATE provider_sessions SET status='completed', updated_sequence=? WHERE id=?",
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
+
+                let thread_id = tx
+                    .query_row(
+                        "SELECT thread_id FROM provider_sessions WHERE id=?",
+                        [e.entity_id.to_string()],
+                        |r| r.get::<_, Option<String>>(0),
+                    )
+                    .optional()?
+                    .flatten();
+
+                let output_key = format!("provider_output:{}", e.entity_id);
+                let output = tx
+                    .query_row(
+                        "SELECT value FROM projections WHERE key=?",
+                        [&output_key],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()?
+                    .unwrap_or_default();
+
+                if let Some(thread_id) = thread_id {
+                    if !output.is_empty() {
+                        tx.execute(
+                            "INSERT OR REPLACE INTO messages(
+                                id,thread_id,role,content,created_sequence
+                             ) VALUES(?,?,?,?,?)",
+                            params![
+                                format!("assistant-{}", e.entity_id),
+                                thread_id,
+                                "assistant",
+                                output,
+                                e.sequence
+                            ],
+                        )?;
+                    }
+                }
+
                 tx.execute(
                     "UPDATE turns SET status='completed', updated_sequence=?
                      WHERE thread_id=(SELECT thread_id FROM provider_sessions WHERE id=?)
