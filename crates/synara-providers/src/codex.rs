@@ -14,7 +14,7 @@ use super::{ProviderAdapter, ProviderMetadata, ProviderRuntimeEvent};
 
 struct SessionState {
     remote_thread_id: Option<String>,
-    process: Option<ManagedProcess>,
+    process: Option<Arc<Mutex<ManagedProcess>>>,
     running: bool,
     terminal_sent: bool,
 }
@@ -106,8 +106,9 @@ impl ProviderAdapter for CodexProvider {
         let stdout = process
             .take_stdout()
             .ok_or_else(|| anyhow!("Codex process has no stdout"))?;
+        let process = Arc::new(Mutex::new(process));
 
-        guard.process = Some(process);
+        guard.process = Some(process.clone());
         guard.running = true;
         guard.terminal_sent = false;
         drop(guard);
@@ -118,11 +119,26 @@ impl ProviderAdapter for CodexProvider {
         tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(event) =
-                    CodexProvider { sessions: Arc::new(Mutex::new(HashMap::new())), events: events.clone() }
-                        .emit_from_json(&session_id, &line, &parser_state)
-                {
-                    let _ = events.send(event);
+                if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    if value.get("type").and_then(Value::as_str) == Some("thread.started") {
+                        if let Some(thread_id) = value.get("thread_id").and_then(Value::as_str) {
+                            parser_state.lock().await.remote_thread_id = Some(thread_id.to_string());
+                        }
+                    }
+                    if let Some(event) = parse_codex_event(&session_id, &value) {
+                        let terminal = matches!(
+                            event,
+                            ProviderRuntimeEvent::Completed { .. } | ProviderRuntimeEvent::Failed { .. }
+                        );
+                        if terminal {
+                            let mut state = parser_state.lock().await;
+                            if state.terminal_sent {
+                                continue;
+                            }
+                            state.terminal_sent = true;
+                        }
+                        let _ = events.send(event);
+                    }
                 }
             }
         });
@@ -131,13 +147,11 @@ impl ProviderAdapter for CodexProvider {
         let sessions = self.sessions.clone();
         let session_id = session.to_string();
         tokio::spawn(async move {
-            let status = {
-                let mut guard = state.lock().await;
-                if let Some(process) = guard.process.as_mut() {
-                    process.wait().await.ok()
-                } else {
-                    None
-                }
+            let process = { state.lock().await.process.clone() };
+            let status = if let Some(process) = process {
+                process.lock().await.wait().await.ok()
+            } else {
+                None
             };
 
             let terminal = {
@@ -212,19 +226,9 @@ impl ProviderAdapter for CodexProvider {
 fn parse_codex_event(
     session_id: &str,
     value: &Value,
-    state: &Arc<Mutex<SessionState>>,
 ) -> Option<ProviderRuntimeEvent> {
     match value.get("type").and_then(Value::as_str)? {
-        "thread.started" => {
-            if let Some(thread_id) = value.get("thread_id").and_then(Value::as_str) {
-                let state = state.clone();
-                let thread_id = thread_id.to_string();
-                tokio::spawn(async move {
-                    state.lock().await.remote_thread_id = Some(thread_id);
-                });
-            }
-            None
-        }
+        "thread.started" => None
         "item.completed" => {
             let item = value.get("item")?;
             match item.get("type").and_then(Value::as_str) {
@@ -316,7 +320,6 @@ mod tests {
                 "type": "turn.failed",
                 "error": {"message": "boom"}
             }),
-            &state,
         );
         assert!(matches!(
             event,
