@@ -62,12 +62,15 @@ impl Orchestrator {
                     anyhow::bail!("workspace does not exist: {workspace_id}");
                 }
             }
-            Command::SendMessage { thread_id, .. } | Command::StartTurn { thread_id } => {
+            Command::SendMessage { thread_id, .. } => {
                 if !self.db.thread_exists(*thread_id)? {
                     anyhow::bail!("thread does not exist: {thread_id}");
                 }
             }
             Command::StartTurn { thread_id } => {
+                if !self.db.thread_exists(*thread_id)? {
+                    anyhow::bail!("thread does not exist: {thread_id}");
+                }
                 if self.db.running_turn_exists(*thread_id)? {
                     anyhow::bail!("thread already has a running turn: {thread_id}");
                 }
