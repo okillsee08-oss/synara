@@ -42,6 +42,18 @@ pub struct CreateProjectRequest {
     pub root_path: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CreateThreadRequest {
+    pub workspace_id: EntityId,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SendMessageRequest {
+    pub thread_id: EntityId,
+    pub content: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct CommandResponse {
     pub id: EntityId,
@@ -53,6 +65,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/ws/negotiate", get(negotiate))
         .route("/api/v1/events", get(events))
         .route("/api/v1/projects", post(create_project))
+        .route("/api/v1/threads", post(create_thread))
+        .route("/api/v1/messages", post(send_message))
         .route("/ws", get(websocket))
         .with_state(state)
 }
@@ -146,6 +160,39 @@ async fn create_project(
     let id = guard.dispatch(Command::CreateProject {
         name: req.name,
         root_path: req.root_path,
+    }).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn create_thread(
+    State(s): State<ApiState>,
+    Json(req): Json<CreateThreadRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard.dispatch(Command::CreateThread {
+        workspace_id: req.workspace_id,
+        title: req.title,
+    }).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn send_message(
+    State(s): State<ApiState>,
+    Json(req): Json<SendMessageRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.content.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".into(),
+                message: "content is required".into(),
+            }),
+        ));
+    }
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard.dispatch(Command::SendMessage {
+        thread_id: req.thread_id,
+        content: req.content,
     }).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
