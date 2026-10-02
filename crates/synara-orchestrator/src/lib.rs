@@ -9,13 +9,36 @@ use synara_providers::ProviderRuntimeEvent;
 
 #[derive(Debug)]
 pub enum Command {
-    CreateProject { name: String, root_path: String },
-    CreateWorkspace { project_id: EntityId, root_path: String },
-    CreateThread { workspace_id: EntityId, title: Option<String> },
-    SendMessage { thread_id: EntityId, content: String },
-    StartTurn { thread_id: EntityId },
-    StopTurn { turn_id: EntityId },
-    ApproveTool { tool_call_id: EntityId, approved: bool },
+    CreateProject {
+        name: String,
+        root_path: String,
+    },
+    CreateWorkspace {
+        project_id: EntityId,
+        root_path: String,
+    },
+    CreateThread {
+        workspace_id: EntityId,
+        title: Option<String>,
+    },
+    SendMessage {
+        thread_id: EntityId,
+        content: String,
+    },
+    StartTurn {
+        thread_id: EntityId,
+    },
+    StopTurn {
+        turn_id: EntityId,
+    },
+    FailTurn {
+        turn_id: EntityId,
+        error: String,
+    },
+    ApproveTool {
+        tool_call_id: EntityId,
+        approved: bool,
+    },
 }
 
 pub struct Orchestrator {
@@ -44,7 +67,12 @@ impl Orchestrator {
                     anyhow::bail!("thread does not exist: {thread_id}");
                 }
             }
-            Command::StopTurn { turn_id } => {
+            Command::StartTurn { thread_id } => {
+                if self.db.running_turn_exists(*thread_id)? {
+                    anyhow::bail!("thread already has a running turn: {thread_id}");
+                }
+            }
+            Command::StopTurn { turn_id } | Command::FailTurn { turn_id, .. } => {
                 if !self.db.turn_exists(*turn_id)? {
                     anyhow::bail!("turn does not exist: {turn_id}");
                 }
@@ -59,13 +87,19 @@ impl Orchestrator {
                 "ProjectCreated",
                 json!({ "name": name, "root_path": root_path }),
             ),
-            Command::CreateWorkspace { project_id, root_path } => (
+            Command::CreateWorkspace {
+                project_id,
+                root_path,
+            } => (
                 EntityId::new(),
                 "workspace",
                 "WorkspaceCreated",
                 json!({ "project_id": project_id, "root_path": root_path }),
             ),
-            Command::CreateThread { workspace_id, title } => (
+            Command::CreateThread {
+                workspace_id,
+                title,
+            } => (
                 EntityId::new(),
                 "thread",
                 "ThreadCreated",
@@ -91,6 +125,12 @@ impl Orchestrator {
                 "turn",
                 "TurnStopped",
                 json!({ "turn_id": turn_id }),
+            ),
+            Command::FailTurn { turn_id, error } => (
+                turn_id,
+                "turn",
+                "TurnFailed",
+                json!({ "turn_id": turn_id, "error": error }),
             ),
             Command::ApproveTool {
                 tool_call_id,
@@ -119,12 +159,13 @@ impl Orchestrator {
         runtime_event: ProviderRuntimeEvent,
     ) -> Result<Sequence> {
         let (session, event_type, payload) = match runtime_event {
-            ProviderRuntimeEvent::Started { session } => (
+            ProviderRuntimeEvent::Started { session, thread } => (
                 session.clone(),
                 "ProviderSessionStarted",
                 json!({
                     "provider_kind": provider_kind,
                     "session": session,
+                    "thread": thread,
                 }),
             ),
             ProviderRuntimeEvent::TextDelta { session, text } => (
