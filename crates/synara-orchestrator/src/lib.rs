@@ -258,6 +258,22 @@ impl Orchestrator {
         Ok(id)
     }
 
+    pub fn recover_interrupted_runtime(&mut self) -> Result<u64> {
+        let sessions = self.db.list_running_provider_sessions()?;
+        let mut recovered = 0;
+        for (session, provider_kind, _thread) in sessions {
+            let _ = self.record_provider_event(
+                &provider_kind,
+                ProviderRuntimeEvent::Failed {
+                    session: session.to_string(),
+                    error: "runtime interrupted by server restart".into(),
+                },
+            )?;
+            recovered += 1;
+        }
+        Ok(recovered)
+    }
+
     pub fn record_provider_event(
         &mut self,
         provider_kind: &str,
