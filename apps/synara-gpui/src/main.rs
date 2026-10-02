@@ -1,4 +1,4 @@
-use gpui::{App, Application, Context, IntoElement, Render, Window, WindowOptions, div, px};
+use gpui::{App, AppContext, Application, Context, IntoElement, Render, Styled, Window, WindowOptions, div, px};
 
 struct SynaraView;
 
