@@ -80,10 +80,16 @@ impl ProviderRegistry {
         self.adapters.iter().map(|adapter| adapter.metadata()).collect()
     }
 
-    pub fn subscribe_all(&self) -> Vec<broadcast::Receiver<ProviderRuntimeEvent>> {
+    pub fn subscribe_all(
+        &self,
+    ) -> Vec<(ProviderMetadata, broadcast::Receiver<ProviderRuntimeEvent>)> {
         self.adapters
             .iter()
-            .filter_map(|adapter| adapter.subscribe())
+            .filter_map(|adapter| {
+                adapter
+                    .subscribe()
+                    .map(|receiver| (adapter.metadata(), receiver))
+            })
             .collect()
     }
 
