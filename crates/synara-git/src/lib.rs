@@ -93,7 +93,6 @@ pub fn commit(path: impl AsRef<Path>, message: &str) -> Result<String> {
     Ok(commit.to_string())
 }
 
-
 #[derive(Debug, Clone)]
 pub struct CommitSummary {
     pub id: String,
