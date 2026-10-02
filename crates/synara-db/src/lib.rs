@@ -823,8 +823,6 @@ impl Database {
                 r.get(0)
             })?)
     }
-}
-
 
     pub fn list_approvals(
         &self,
@@ -849,3 +847,6 @@ impl Database {
         }
         Ok(out)
     }
+
+
+}
