@@ -32,6 +32,16 @@ pub struct NegotiationQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[derive(Debug, Serialize)]
+pub struct RuntimeSummary {
+    pub latest_sequence: u64,
+    pub projects: u64,
+    pub threads: u64,
+    pub messages: u64,
+    pub provider_count: usize,
+}
+
+#[derive(Debug, Serialize)]
 pub struct Health {
     pub status: &'static str,
     pub service: String,
@@ -67,6 +77,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/ws/negotiate", get(negotiate))
         .route("/api/v1/events", get(events))
         .route("/api/v1/providers", get(providers))
+        .route("/api/v1/summary", get(summary))
         .route("/api/v1/projects", post(create_project))
         .route("/api/v1/threads", post(create_thread))
         .route("/api/v1/messages", post(send_message))
@@ -114,6 +125,20 @@ async fn negotiate(
         negotiated_revision: CURRENT_REVISION,
         server_instance_id: s.server_instance_id.to_string(),
         capabilities: vec!["replay".into(), "snapshot".into(), "websocket".into()],
+    }))
+}
+
+async fn summary(
+    State(s): State<ApiState>,
+) -> Result<Json<RuntimeSummary>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let db = &guard.db;
+    Ok(Json(RuntimeSummary {
+        latest_sequence: db.latest_sequence().map_err(internal_error)?,
+        projects: db.project_count().map_err(internal_error)?,
+        threads: db.thread_count().map_err(internal_error)?,
+        messages: db.message_count().map_err(internal_error)?,
+        provider_count: s.providers.list().len(),
     }))
 }
 
