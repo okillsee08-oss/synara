@@ -9,3 +9,4 @@ anyhow.workspace=true
 serde.workspace=true
 serde_json.workspace=true
 tokio={version="1",features=["process","io-util"]}
+reqwest.workspace=true
