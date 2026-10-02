@@ -16,4 +16,5 @@ synara-orchestrator={path="../synara-orchestrator"}
 synara-protocol={path="../synara-protocol"}
 synara-providers={path="../synara-providers"}
 synara-transport={path="../synara-transport"}
+synara-terminal={path="../synara-terminal"}
 tower-http={version="0.6",features=["cors","fs"]}
