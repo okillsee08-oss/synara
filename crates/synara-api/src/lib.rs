@@ -50,6 +50,8 @@ pub struct RuntimeSummary {
     pub approvals: u64,
     pub messages: u64,
     pub provider_sessions: u64,
+    pub tasks: u64,
+    pub subagents: u64,
     pub provider_count: usize,
 }
 
