@@ -34,7 +34,7 @@ impl CliProvider {
 impl ProviderAdapter for CliProvider {
     fn metadata(&self) -> ProviderMetadata { self.meta.clone() }
 
-    async fn start_session(&self, _thread: &str) -> Result<String> {
+    async fn start_session(&self, thread: &str) -> Result<String> {
         let spec = ProcessSpec {
             program: self.program.clone(),
             args: Vec::new(),
@@ -42,7 +42,10 @@ impl ProviderAdapter for CliProvider {
         };
         let mut child = ManagedProcess::spawn(spec).await?;
         let session = Uuid::new_v4().to_string();
-        let _ = self.events.send(ProviderRuntimeEvent::Started { session: session.clone() });
+        let _ = self.events.send(ProviderRuntimeEvent::Started {
+            session: session.clone(),
+            thread: thread.to_string(),
+        });
         if let Some(stdout) = child.take_stdout() {
             let events = self.events.clone();
             let session_for_task = session.clone();
