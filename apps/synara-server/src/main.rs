@@ -1,2 +1,2 @@
-use anyhow::Result;use synara_db::Database;use synara_orchestrator::{Command,Orchestrator};
-fn main()->Result<()>{let db=Database::open_memory()?;let mut app=Orchestrator::new(db)?;let id=app.dispatch(Command::CreateProject{name:"Synara".into(),root_path:".".into()})?;println!("Synara Rust core ready: {id}");Ok(())}
+use anyhow::Result;use std::{net::SocketAddr,path::PathBuf};use synara_api::{router,ApiState};use synara_diagnostics::init;
+#[tokio::main]async fn main()->Result<()>{init();let state=ApiState{name:"synara".into()};let app=router(state);let addr:SocketAddr=std::env::var("SYNARA_ADDR").unwrap_or_else(|_|"127.0.0.1:3210".into()).parse()?;println!("Synara Rust server listening on http://{addr}");axum::serve(tokio::net::TcpListener::bind(addr).await?,app).await?;Ok(())}
