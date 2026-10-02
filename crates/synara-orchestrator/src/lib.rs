@@ -260,7 +260,10 @@ impl Orchestrator {
 
     pub fn recover_interrupted_runtime(&mut self) -> Result<u64> {
         let sessions = self.db.list_running_provider_sessions()?;
+        let tasks = self.db.list_running_tasks()?;
+        let subagents = self.db.list_running_subagents()?;
         let mut recovered = 0;
+
         for (session, provider_kind, _thread) in sessions {
             let _ = self.record_provider_event(
                 &provider_kind,
@@ -271,6 +274,20 @@ impl Orchestrator {
             )?;
             recovered += 1;
         }
+
+        for task_id in tasks {
+            self.dispatch(Command::FailTask {
+                task_id,
+                error: "task interrupted by server restart".into(),
+            })?;
+            recovered += 1;
+        }
+
+        for subagent_id in subagents {
+            self.dispatch(Command::StopSubagent { subagent_id })?;
+            recovered += 1;
+        }
+
         Ok(recovered)
     }
 
