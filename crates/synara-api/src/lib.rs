@@ -81,6 +81,20 @@ pub struct SendMessageRequest {
     pub content: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StartTurnRequest {
+    pub thread_id: EntityId,
+    pub provider_kind: String,
+    pub prompt: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StartTurnResponse {
+    pub message_id: EntityId,
+    pub turn_id: EntityId,
+    pub provider_session_id: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct CommandResponse {
     pub id: EntityId,
@@ -131,6 +145,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/workspaces", get(list_workspaces).post(create_workspace))
         .route("/api/v1/threads", get(list_threads).post(create_thread))
         .route("/api/v1/messages", get(list_messages).post(send_message))
+        .route("/api/v1/turns", post(start_turn))
         .route("/ws", get(websocket))
         .layer(CorsLayer::permissive())
         .fallback_service(ServeDir::new(
@@ -248,6 +263,79 @@ async fn events(
 struct ReplayQuery {
     #[serde(default)]
     after: u64,
+}
+
+async fn start_turn(
+    State(s): State<ApiState>,
+    Json(req): Json<StartTurnRequest>,
+) -> Result<Json<StartTurnResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.prompt.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".into(),
+                message: "prompt is required".into(),
+            }),
+        ));
+    }
+
+    let provider = s.providers.get(&req.provider_kind).ok_or_else(|| {
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(ApiError {
+                code: "PROVIDER_NOT_FOUND".into(),
+                message: format!("unknown provider: {}", req.provider_kind),
+            }),
+        )
+    })?;
+
+    let (message_id, turn_id) = {
+        let mut guard = s.orchestrator.lock().await;
+        let message_id = guard
+            .dispatch(Command::SendMessage {
+                thread_id: req.thread_id,
+                content: req.prompt.clone(),
+            })
+            .map_err(internal_error)?;
+        publish_latest(&s, &guard).map_err(internal_error)?;
+
+        let turn_id = guard
+            .dispatch(Command::StartTurn {
+                thread_id: req.thread_id,
+            })
+            .map_err(internal_error)?;
+        publish_latest(&s, &guard).map_err(internal_error)?;
+        (message_id, turn_id)
+    };
+
+    let provider_session_id = match provider.start_session(&req.thread_id.to_string()).await {
+        Ok(session) => session,
+        Err(error) => {
+            let mut guard = s.orchestrator.lock().await;
+            let _ = guard.dispatch(Command::FailTurn {
+                turn_id,
+                error: error.to_string(),
+            });
+            let _ = publish_latest(&s, &guard);
+            return Err(internal_error(error));
+        }
+    };
+
+    if let Err(error) = provider.send_turn(&provider_session_id, &req.prompt).await {
+        let mut guard = s.orchestrator.lock().await;
+        let _ = guard.dispatch(Command::FailTurn {
+            turn_id,
+            error: error.to_string(),
+        });
+        let _ = publish_latest(&s, &guard);
+        return Err(internal_error(error));
+    }
+
+    Ok(Json(StartTurnResponse {
+        message_id,
+        turn_id,
+        provider_session_id,
+    }))
 }
 
 async fn list_projects(
