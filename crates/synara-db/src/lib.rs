@@ -186,6 +186,12 @@ impl Database {
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
+            "TurnFailed" => {
+                tx.execute(
+                    "UPDATE turns SET status='failed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
             "ToolApproved" | "ToolRejected" => {
                 tx.execute(
                     "INSERT INTO approvals(id,tool_call_id,approved,updated_sequence) VALUES(?,?,?,?)
@@ -218,10 +224,22 @@ impl Database {
                     "UPDATE provider_sessions SET status='completed', updated_sequence=? WHERE id=?",
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
+                tx.execute(
+                    "UPDATE turns SET status='completed', updated_sequence=?
+                     WHERE thread_id=(SELECT thread_id FROM provider_sessions WHERE id=?)
+                       AND status='running'",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
             }
             "ProviderFailed" => {
                 tx.execute(
                     "UPDATE provider_sessions SET status='failed', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+                tx.execute(
+                    "UPDATE turns SET status='failed', updated_sequence=?
+                     WHERE thread_id=(SELECT thread_id FROM provider_sessions WHERE id=?)
+                       AND status='running'",
                     params![e.sequence, e.entity_id.to_string()],
                 )?;
             }
