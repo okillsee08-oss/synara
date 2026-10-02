@@ -40,6 +40,7 @@ impl ProviderAdapter for CodexProvider {
         ProviderMetadata {
             kind: "codex".into(),
             display_name: "Codex".into(),
+            capabilities: vec!["streaming".into(), "tool_calls".into(), "resume".into()],
         }
     }
 
