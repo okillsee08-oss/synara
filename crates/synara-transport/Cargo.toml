@@ -1,0 +1,12 @@
+[package]
+name="synara-transport"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[dependencies]
+axum="0.8"
+tokio={version="1",features=["sync"]}
+serde.workspace=true
+serde_json.workspace=true
+uuid.workspace=true
+synara-protocol={path="../synara-protocol"}
