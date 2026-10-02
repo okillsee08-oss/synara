@@ -77,7 +77,6 @@ fn provider_session_lifecycle_is_projected() {
     assert_eq!(db.provider_session_count().unwrap(), 1);
 }
 
-
 #[test]
 fn provider_output_becomes_assistant_message() {
     let db = Database::open_memory().unwrap();
@@ -93,7 +92,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"name":"p","root_path":"/tmp/p"}),
         1,
         1,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "workspace",
         workspace,
@@ -101,7 +101,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"project_id":project,"root_path":"/tmp/p"}),
         1,
         2,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "thread",
         thread,
@@ -109,7 +110,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"workspace_id":workspace,"title":"t"}),
         1,
         3,
-    )).unwrap();
+    ))
+    .unwrap();
     let turn = EntityId::new();
     db.append_event(&Event::new(
         "turn",
@@ -118,7 +120,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"thread_id":thread,"turn_id":turn}),
         1,
         4,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "provider",
         session,
@@ -130,7 +133,8 @@ fn provider_output_becomes_assistant_message() {
         }),
         1,
         5,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "provider",
         session,
@@ -138,7 +142,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"provider_kind":"test","session":session,"text":"hello "}),
         1,
         6,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "provider",
         session,
@@ -146,7 +151,8 @@ fn provider_output_becomes_assistant_message() {
         json!({"provider_kind":"test","session":session,"text":"world"}),
         1,
         7,
-    )).unwrap();
+    ))
+    .unwrap();
     db.append_event(&Event::new(
         "provider",
         session,
@@ -154,10 +160,13 @@ fn provider_output_becomes_assistant_message() {
         json!({"provider_kind":"test","session":session}),
         1,
         8,
-    )).unwrap();
+    ))
+    .unwrap();
 
     let messages = db.list_messages().unwrap();
-    let assistant = messages.iter().find(|(_, _, role, _, _)| role == "assistant");
+    let assistant = messages
+        .iter()
+        .find(|(_, _, role, _, _)| role == "assistant");
     assert!(assistant.is_some());
     assert_eq!(assistant.unwrap().3, "hello world");
 }
