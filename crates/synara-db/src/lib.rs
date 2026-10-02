@@ -252,15 +252,23 @@ impl Database {
                 )?;
             }
             "ToolApproved" | "ToolRejected" => {
+                let tool_call_id = e.payload["tool_call_id"].to_string().trim_matches('"').to_string();
+                let approved = e.payload["approved"]
+                    .as_bool()
+                    .unwrap_or(e.event_type == "ToolApproved");
                 tx.execute(
                     "INSERT INTO approvals(id,tool_call_id,approved,updated_sequence) VALUES(?,?,?,?)
                      ON CONFLICT(id) DO UPDATE SET approved=excluded.approved,updated_sequence=excluded.updated_sequence",
                     params![
                         e.entity_id.to_string(),
-                        e.payload["tool_call_id"].to_string().trim_matches('"'),
-                        e.payload["approved"].as_bool().map(|v| if v { 1 } else { 0 }),
+                        tool_call_id,
+                        if approved { 1 } else { 0 },
                         e.sequence
                     ],
+                )?;
+                tx.execute(
+                    "UPDATE tool_calls SET status=?, updated_sequence=? WHERE id=?",
+                    params![if approved { "approved" } else { "rejected" }, e.sequence, tool_call_id],
                 )?;
             }
             "TaskCreated" => {
