@@ -56,7 +56,7 @@ pub struct CreateProjectRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateThreadRequest {
+pub struct CreateWorkspaceRequest {\n    pub project_id: EntityId,\n    pub root_path: String,\n}\n\n#[derive(Debug, Deserialize)]\npub struct CreateThreadRequest {
     pub workspace_id: EntityId,
     pub title: Option<String>,
 }
@@ -80,7 +80,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/providers", get(providers))
         .route("/api/v1/summary", get(summary))
         .route("/api/v1/projects", post(create_project))
-        .route("/api/v1/threads", post(create_thread))
+        .route("/api/v1/workspaces", post(create_workspace))\n        .route("/api/v1/threads", post(create_thread))
         .route("/api/v1/messages", post(send_message))
         .route("/ws", get(websocket))
         .with_state(state)
@@ -192,6 +192,28 @@ async fn create_project(
     let mut guard = s.orchestrator.lock().await;
     let id = guard.dispatch(Command::CreateProject {
         name: req.name,
+        root_path: req.root_path,
+    }).map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id }))
+}
+
+async fn create_workspace(
+    State(s): State<ApiState>,
+    Json(req): Json<CreateWorkspaceRequest>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    if req.root_path.trim().is_empty() {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_REQUEST".into(),
+                message: "root_path is required".into(),
+            }),
+        ));
+    }
+    let mut guard = s.orchestrator.lock().await;
+    let id = guard.dispatch(Command::CreateWorkspace {
+        project_id: req.project_id,
         root_path: req.root_path,
     }).map_err(internal_error)?;
     publish_latest(&s, &guard).map_err(internal_error)?;
