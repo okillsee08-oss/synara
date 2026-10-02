@@ -28,8 +28,11 @@ pub struct ApiState {
 #[derive(Debug, Deserialize)]
 pub struct NegotiationQuery {
     pub epoch: Option<u64>,
+    #[serde(alias = "minRevision")]
     pub min_revision: Option<u32>,
+    #[serde(alias = "maxRevision")]
     pub max_revision: Option<u32>,
+    #[serde(alias = "clientBuild")]
     pub client_build: Option<String>,
 }
 
@@ -42,6 +45,7 @@ pub struct RuntimeSummary {
     pub turns: u64,
     pub approvals: u64,
     pub messages: u64,
+    pub provider_sessions: u64,
     pub provider_count: usize,
 }
 
@@ -169,6 +173,7 @@ async fn summary(
         turns: db.turn_count().map_err(internal_error)?,
         approvals: db.approval_count().map_err(internal_error)?,
         messages: db.message_count().map_err(internal_error)?,
+        provider_sessions: db.provider_session_count().map_err(internal_error)?,
         provider_count: s.providers.list().len(),
     }))
 }
@@ -291,9 +296,13 @@ struct WebSocketQuery {
     last_sequence: u64,
     epoch: Option<u64>,
     revision: Option<u32>,
+    #[serde(alias = "minRevision")]
     min_revision: Option<u32>,
+    #[serde(alias = "maxRevision")]
     max_revision: Option<u32>,
+    #[serde(alias = "clientBuild")]
     client_build: Option<String>,
+    #[serde(alias = "serverInstance")]
     server_instance: Option<String>,
 }
 
