@@ -3,6 +3,8 @@ name="synara-cli"
 version.workspace=true
 edition.workspace=true
 license.workspace=true
+
+[dependencies]
 tokio={version="1",features=["macros","rt-multi-thread"]}
 anyhow.workspace=true
 synara-server={path="../synara-server"}
