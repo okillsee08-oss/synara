@@ -1,1 +1,1 @@
-fn main(){println!("Synara CLI foundation");}
+use std::env;fn main(){let mut a=env::args().skip(1);match a.next().as_deref(){Some("version")=>println!("synara 0.1.0"),Some("help")|None=>println!("synara <command>\n\nCommands:\n  server    Run the Synara server\n  version   Print version\n  help      Show help"),Some("server")=>println!("Start apps/synara-server to run the server."),Some(x)=>{eprintln!("unknown command: {x}");std::process::exit(2)}}}
