@@ -296,9 +296,9 @@ impl Orchestrator {
         provider_kind: &str,
         runtime_event: ProviderRuntimeEvent,
     ) -> Result<Sequence> {
-        let (session, event_type, payload) = match runtime_event {
+        let (entity_id, event_type, payload) = match runtime_event {
             ProviderRuntimeEvent::Started { session, thread } => (
-                session.clone(),
+                session.parse().unwrap_or_else(|_| EntityId::new()),
                 "ProviderSessionStarted",
                 json!({
                     "provider_kind": provider_kind,
@@ -307,7 +307,7 @@ impl Orchestrator {
                 }),
             ),
             ProviderRuntimeEvent::TextDelta { session, text } => (
-                session.clone(),
+                session.parse().unwrap_or_else(|_| EntityId::new()),
                 "ProviderTextDelta",
                 json!({
                     "provider_kind": provider_kind,
@@ -320,7 +320,7 @@ impl Orchestrator {
                 name,
                 arguments,
             } => (
-                session.clone(),
+                EntityId::new(),
                 "ProviderToolCall",
                 json!({
                     "provider_kind": provider_kind,
@@ -330,7 +330,7 @@ impl Orchestrator {
                 }),
             ),
             ProviderRuntimeEvent::Completed { session } => (
-                session.clone(),
+                session.parse().unwrap_or_else(|_| EntityId::new()),
                 "ProviderCompleted",
                 json!({
                     "provider_kind": provider_kind,
@@ -338,7 +338,7 @@ impl Orchestrator {
                 }),
             ),
             ProviderRuntimeEvent::Failed { session, error } => (
-                session.clone(),
+                session.parse().unwrap_or_else(|_| EntityId::new()),
                 "ProviderFailed",
                 json!({
                     "provider_kind": provider_kind,
@@ -348,7 +348,6 @@ impl Orchestrator {
             ),
         };
 
-        let entity_id = session.parse().unwrap_or_else(|_| EntityId::new());
         let sequence = self.db.latest_sequence()? + 1;
         let event = Event::new("provider", entity_id, event_type, payload, 1, sequence);
         self.db.append_event(&event)?;
