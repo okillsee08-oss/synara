@@ -9,7 +9,7 @@ axum={version="0.8",features=["ws"]}
 serde.workspace=true
 serde_json.workspace=true
 uuid.workspace=true
-tokio={version="1",features=["sync"]}
+tokio={version="1",features=["sync","macros"]}
 anyhow.workspace=true
 synara-core={path="../synara-core"}
 synara-orchestrator={path="../synara-orchestrator"}
