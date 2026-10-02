@@ -197,9 +197,9 @@ mod hardening_tests {
     use super::*;
     #[tokio::test]
     async fn rejects_invalid_spawn_configuration() {
-        let err = AcpSession::spawn_with_timeout("  ", &[], Duration::from_secs(1)).await.unwrap_err();
+        let err = match AcpSession::spawn_with_timeout("  ", &[], Duration::from_secs(1)).await { Err(err) => err, Ok(_) => panic!("invalid program was accepted") };
         assert!(err.to_string().contains("program cannot be empty"));
-        let err = AcpSession::spawn_with_timeout("true", &[], Duration::ZERO).await.unwrap_err();
+        let err = match AcpSession::spawn_with_timeout("true", &[], Duration::ZERO).await { Err(err) => err, Ok(_) => panic!("zero timeout was accepted") };
         assert!(err.to_string().contains("timeout must be greater than zero"));
     }
 }
