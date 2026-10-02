@@ -12,7 +12,7 @@ pub enum Command {
     CreateThread { workspace_id: EntityId, title: Option<String> },
     SendMessage { thread_id: EntityId, content: String },
     StartTurn { thread_id: EntityId },
-    StopTurn { thread_id: EntityId },
+    StopTurn { turn_id: EntityId },
     ApproveTool { tool_call_id: EntityId, approved: bool },
 }
 
@@ -45,10 +45,9 @@ impl Orchestrator {
                 let turn_id = EntityId::new();
                 (turn_id, "turn", "TurnStarted", json!({ "thread_id": thread_id, "turn_id": turn_id }))
             },
-            Command::StopTurn { thread_id } => {
-                let turn_id = EntityId::new();
-                (turn_id, "turn", "TurnStopped", json!({ "thread_id": thread_id, "turn_id": turn_id }))
-            },
+            Command::StopTurn { turn_id } => (
+                turn_id, "turn", "TurnStopped", json!({ "turn_id": turn_id })
+            ),
             Command::ApproveTool { tool_call_id, approved } => (
                 tool_call_id, "approval",
                 if approved { "ToolApproved" } else { "ToolRejected" },
