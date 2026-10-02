@@ -581,6 +581,14 @@ impl Database {
         )?)
     }
 
+    pub fn subagent_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM subagents WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
     pub fn list_tasks(
         &self,
     ) -> Result<
