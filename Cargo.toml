@@ -1,7 +1,6 @@
 [workspace]
-resolver = "2"
-members = [
-"crates/synara-core","crates/synara-domain","crates/synara-config","crates/synara-platform","crates/synara-events","crates/synara-db","crates/synara-runtime","crates/synara-orchestrator","crates/synara-process","crates/synara-providers","crates/synara-protocol","crates/synara-acp","crates/synara-mcp","crates/synara-security","crates/synara-terminal","crates/synara-files","crates/synara-git","crates/synara-worktrees","crates/synara-automation","apps/synara-server","apps/synara-cli","apps/synara-tauri","apps/synara-gpui"]
+resolver="2"
+members=["crates/synara-core","crates/synara-domain","crates/synara-config","crates/synara-platform","crates/synara-events","crates/synara-db","crates/synara-runtime","crates/synara-orchestrator","crates/synara-process","crates/synara-providers","crates/synara-protocol","crates/synara-acp","crates/synara-mcp","crates/synara-security","crates/synara-terminal","crates/synara-files","crates/synara-git","crates/synara-worktrees","crates/synara-automation","crates/synara-api","crates/synara-transport","crates/synara-diagnostics","crates/synara-browser","crates/synara-computer","crates/synara-voice","apps/synara-server","apps/synara-cli","apps/synara-tauri","apps/synara-gpui"]
 [workspace.package]
 version="0.1.0"
 edition="2024"
