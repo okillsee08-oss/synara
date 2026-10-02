@@ -1,29 +1,25 @@
 # Synara Rust Rewrite
 
-Target: fresh Rust implementation using a shared Rust core with Tauri and GPUI presentation layers.
+The rust-rewrite branch contains the independent Rust implementation while main remains the behavioral reference.
 
-## Execution status
+## Implemented
+- Cargo workspace with dedicated core/domain/config/platform crates.
+- Durable event model and SQLite persistence with migrations and sequence replay.
+- Orchestration command path for project/thread/message/turn/tool approval lifecycle events.
+- Tokio runtime primitives and cancellation supervision.
+- Cross-platform process abstraction and terminal boundary.
+- Provider adapter registry with built-in provider metadata and process-backed adapters for Codex, Claude Agent, Cursor, Devin, Antigravity, Grok, Droid, OpenCode and Pi.
+- ACP and MCP protocol data boundaries.
+- Central security policy boundary for network, shell and filesystem operations.
+- Workspace-confined filesystem access.
+- Git repository/status and worktree boundaries.
+- Automation scheduler primitives.
+- Axum server/API foundation and typed transport/event-bus primitives.
+- Diagnostics, browser, computer-use and voice extension boundaries.
+- CLI command surface and runnable HTTP server.
 
-The rewrite is being implemented incrementally on the `rust-rewrite` branch. The existing TypeScript/Bun/Electron implementation remains untouched as the behavioral reference.
+## Compatibility direction
+The Rust core is authoritative for durable orchestration. Provider-native protocols remain behind adapters; transport and UI are replaceable. The existing TypeScript/Bun/Electron tree remains intact until equivalent behavior is validated.
 
-## Current foundation
-
-- Cargo workspace and stable Rust toolchain
-- UI-independent core primitives and typed IDs
-- Canonical domain entities
-- Layered configuration model
-- Cross-platform platform boundary
-- Initial server, CLI, Tauri, and GPUI application shells
-
-## Architecture constraints
-
-- Durable state belongs to the Rust application core.
-- Provider-native behavior is isolated behind adapters.
-- State-changing operations have one authoritative orchestration path.
-- Tauri and GPUI contain presentation/native-shell concerns, not domain logic.
-- Existing transport compatibility and recovery semantics are preserved during migration.
-- Existing implementation is not deleted until replacement behavior is validated.
-
-## Next implementation layers
-
-Persistence/events, runtime supervision, orchestration, process/PTY, provider adapters, ACP/MCP, Git/worktrees, HTTP/WebSocket, Tauri integration, React compatibility, GPUI, advanced integrations, cross-platform testing and release packaging.
+## Verification
+The branch is structured as a Cargo workspace and includes the implementation layers needed for migration. Full dependency compilation and end-to-end parity validation requires a Cargo-enabled checkout or CI runner; GitHub file operations alone cannot execute Cargo locally.
