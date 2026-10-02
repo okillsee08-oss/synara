@@ -1,24 +1,23 @@
 use anyhow::Result;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 use synara_api::{ApiState, router};
+use synara_config::ServerConfig;
 use synara_db::Database;
 use synara_diagnostics::init;
 use synara_orchestrator::Orchestrator;
 use synara_providers::ProviderRegistry;
 use synara_transport::EventBus;
-use tokio::sync::Mutex;
 
 pub async fn run() -> Result<()> {
     init();
 
-    let db_path = std::env::var_os("SYNARA_DB")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("synara.db"));
-    let db = Database::open(db_path)?;
+    let config = ServerConfig::from_env()?;
+    let db = Database::open(&config.db_path)?;
     let mut orchestrator = Orchestrator::new(db)?;
     let recovered = orchestrator.recover_interrupted_runtime()?;
     if recovered > 0 {
-        println!("Recovered {recovered} interrupted provider session(s)");
+        println!("Recovered {recovered} interrupted runtime item(s)");
     }
 
     let mut providers = ProviderRegistry::new();
@@ -27,12 +26,14 @@ pub async fn run() -> Result<()> {
 
     let state = ApiState {
         name: "synara".into(),
-        epoch: 1,
+        epoch: config.epoch,
         server_instance_id: Arc::from(uuid::Uuid::new_v4().to_string()),
         orchestrator: Arc::new(Mutex::new(orchestrator)),
         providers: Arc::new(providers),
         events: EventBus::new(2048),
         terminals: Arc::new(Mutex::new(std::collections::HashMap::new())),
+        web_dir: config.web_dir.clone(),
+        client_build: Arc::from(config.client_build.clone()),
     };
 
     for (metadata, mut receiver) in provider_subscriptions {
@@ -65,8 +66,11 @@ pub async fn run() -> Result<()> {
                             }
                         }
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        continue;
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        eprintln!(
+                            "provider {} event subscriber lagged by {} event(s)",
+                            metadata.kind, skipped
+                        );
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
@@ -75,9 +79,7 @@ pub async fn run() -> Result<()> {
     }
 
     let app = router(state);
-    let addr: SocketAddr = std::env::var("SYNARA_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:3210".into())
-        .parse()?;
+    let addr: SocketAddr = config.addr;
 
     println!("Synara Rust server listening on http://{addr}");
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
