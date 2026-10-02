@@ -8,3 +8,5 @@ async-trait="0.1"
 serde.workspace=true
 serde_json.workspace=true
 anyhow.workspace=true
+uuid.workspace=true
+synara-process={path="../synara-process"}
