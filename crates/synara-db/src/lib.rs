@@ -50,6 +50,25 @@ impl Database {
                  root_path TEXT NOT NULL,
                  created_sequence INTEGER NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS workspaces(
+                 id TEXT PRIMARY KEY,
+                 project_id TEXT NOT NULL,
+                 root_path TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS turns(
+                 id TEXT PRIMARY KEY,
+                 thread_id TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS approvals(
+                 id TEXT PRIMARY KEY,
+                 tool_call_id TEXT NOT NULL,
+                 approved INTEGER,
+                 updated_sequence INTEGER NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS threads(
                  id TEXT PRIMARY KEY,
                  workspace_id TEXT NOT NULL,
@@ -89,6 +108,17 @@ impl Database {
                     ],
                 )?;
             }
+            "WorkspaceCreated" => {
+                self.conn.execute(
+                    "INSERT INTO workspaces(id,project_id,root_path,created_sequence) VALUES(?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["project_id"].to_string().trim_matches('"'),
+                        e.payload["root_path"].as_str().unwrap_or_default(),
+                        e.sequence
+                    ],
+                )?;
+            }
             "ThreadCreated" => {
                 self.conn.execute(
                     "INSERT INTO threads(id,workspace_id,title,created_sequence) VALUES(?,?,?,?)",
@@ -96,6 +126,36 @@ impl Database {
                         e.entity_id.to_string(),
                         e.payload["workspace_id"].to_string().trim_matches('"'),
                         e.payload["title"].as_str(),
+                        e.sequence
+                    ],
+                )?;
+            }
+            "TurnStarted" => {
+                self.conn.execute(
+                    "INSERT INTO turns(id,thread_id,status,created_sequence,updated_sequence) VALUES(?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["thread_id"].to_string().trim_matches('"'),
+                        "running",
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "TurnStopped" => {
+                self.conn.execute(
+                    "UPDATE turns SET status='cancelled', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "ToolApproved" | "ToolRejected" => {
+                self.conn.execute(
+                    "INSERT INTO approvals(id,tool_call_id,approved,updated_sequence) VALUES(?,?,?,?)
+                     ON CONFLICT(id) DO UPDATE SET approved=excluded.approved,updated_sequence=excluded.updated_sequence",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["tool_call_id"].to_string().trim_matches('"'),
+                        e.payload["approved"].as_bool().map(|v| if v { 1 } else { 0 }),
                         e.sequence
                     ],
                 )?;
@@ -154,7 +214,7 @@ impl Database {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
     }
 
-    pub fn message_count(&self) -> Result<u64> {
+    pub fn workspace_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)\n    }\n\n    pub fn turn_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)\n    }\n\n    pub fn approval_count(&self) -> Result<u64> {\n        Ok(self.conn.query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)\n    }\n\n    pub fn message_count(&self) -> Result<u64> {
         Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
     }
 
