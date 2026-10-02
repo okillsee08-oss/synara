@@ -10,7 +10,7 @@ use synara_events::Event;
 pub enum Command {
     CreateProject { name: String, root_path: String },
     CreateWorkspace { project_id: EntityId, root_path: String },
-    CreateThread { workspace_id: EntityId, title: Option<String },
+    CreateThread { workspace_id: EntityId, title: Option<String> },
     SendMessage { thread_id: EntityId, content: String },
     StartTurn { thread_id: EntityId },
     StopTurn { turn_id: EntityId },
