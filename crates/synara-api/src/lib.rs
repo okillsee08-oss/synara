@@ -129,6 +129,24 @@ pub struct SubagentResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct ToolCallResponse {
+    pub id: EntityId,
+    pub turn_id: Option<EntityId>,
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub status: String,
+    pub created_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ApprovalResponse {
+    pub id: EntityId,
+    pub tool_call_id: EntityId,
+    pub approved: Option<bool>,
+    pub updated_sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
 pub struct StartTurnResponse {
     pub message_id: EntityId,
     pub turn_id: EntityId,
@@ -198,6 +216,10 @@ pub fn router(state: ApiState) -> Router {
             get(list_subagents).post(create_subagent),
         )
         .route("/api/v1/subagents/:id/stop", post(stop_subagent))
+        .route("/api/v1/tool-calls", get(list_tool_calls))
+        .route("/api/v1/approvals", get(list_approvals))
+        .route("/api/v1/tool-calls/:id/approve", post(approve_tool))
+        .route("/api/v1/tool-calls/:id/reject", post(reject_tool))
         .route("/ws", get(websocket))
         .layer(CorsLayer::permissive())
         .fallback_service(ServeDir::new(
@@ -397,6 +419,80 @@ async fn start_turn(
         turn_id,
         provider_session_id,
     }))
+}
+
+async fn list_tool_calls(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<ToolCallResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let items = guard
+        .db
+        .list_tool_calls()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(
+            |(id, turn_id, name, arguments, status, created_sequence)| ToolCallResponse {
+                id,
+                turn_id,
+                name,
+                arguments: serde_json::from_str(&arguments).unwrap_or(serde_json::Value::Null),
+                status,
+                created_sequence,
+            },
+        )
+        .collect();
+    Ok(Json(items))
+}
+
+async fn list_approvals(
+    State(s): State<ApiState>,
+) -> Result<Json<Vec<ApprovalResponse>>, (axum::http::StatusCode, Json<ApiError>)> {
+    let guard = s.orchestrator.lock().await;
+    let items = guard
+        .db
+        .list_approvals()
+        .map_err(internal_error)?
+        .into_iter()
+        .map(
+            |(id, tool_call_id, approved, updated_sequence)| ApprovalResponse {
+                id,
+                tool_call_id,
+                approved,
+                updated_sequence,
+            },
+        )
+        .collect();
+    Ok(Json(items))
+}
+
+async fn approve_tool(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let result = guard
+        .dispatch(Command::ApproveTool {
+            tool_call_id: id,
+            approved: true,
+        })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id: result }))
+}
+
+async fn reject_tool(
+    State(s): State<ApiState>,
+    Path(id): Path<EntityId>,
+) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
+    let mut guard = s.orchestrator.lock().await;
+    let result = guard
+        .dispatch(Command::ApproveTool {
+            tool_call_id: id,
+            approved: false,
+        })
+        .map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
+    Ok(Json(CommandResponse { id: result }))
 }
 
 async fn list_tasks(
