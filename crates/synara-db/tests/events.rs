@@ -76,3 +76,88 @@ fn provider_session_lifecycle_is_projected() {
 
     assert_eq!(db.provider_session_count().unwrap(), 1);
 }
+
+
+#[test]
+fn provider_output_becomes_assistant_message() {
+    let db = Database::open_memory().unwrap();
+    let session = EntityId::new();
+    let thread = EntityId::new();
+    let project = EntityId::new();
+    let workspace = EntityId::new();
+
+    db.append_event(&Event::new(
+        "project",
+        project,
+        "ProjectCreated",
+        json!({"name":"p","root_path":"/tmp/p"}),
+        1,
+        1,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "workspace",
+        workspace,
+        "WorkspaceCreated",
+        json!({"project_id":project,"root_path":"/tmp/p"}),
+        1,
+        2,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "thread",
+        thread,
+        "ThreadCreated",
+        json!({"workspace_id":workspace,"title":"t"}),
+        1,
+        3,
+    )).unwrap();
+    let turn = EntityId::new();
+    db.append_event(&Event::new(
+        "turn",
+        turn,
+        "TurnStarted",
+        json!({"thread_id":thread,"turn_id":turn}),
+        1,
+        4,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider",
+        session,
+        "ProviderSessionStarted",
+        json!({
+            "provider_kind":"test",
+            "session":session,
+            "thread":thread
+        }),
+        1,
+        5,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider",
+        session,
+        "ProviderTextDelta",
+        json!({"provider_kind":"test","session":session,"text":"hello "}),
+        1,
+        6,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider",
+        session,
+        "ProviderTextDelta",
+        json!({"provider_kind":"test","session":session,"text":"world"}),
+        1,
+        7,
+    )).unwrap();
+    db.append_event(&Event::new(
+        "provider",
+        session,
+        "ProviderCompleted",
+        json!({"provider_kind":"test","session":session}),
+        1,
+        8,
+    )).unwrap();
+
+    let messages = db.list_messages().unwrap();
+    let assistant = messages.iter().find(|(_, _, role, _, _)| role == "assistant");
+    assert!(assistant.is_some());
+    assert_eq!(assistant.unwrap().3, "hello world");
+}
