@@ -18,6 +18,17 @@ pub struct McpServerConfig {
     pub endpoint: Option<String>,
 }
 
+impl McpServerConfig {
+    pub fn validate(&self) -> Result<()> {
+        if self.name.trim().is_empty() { anyhow::bail!("MCP server name cannot be empty"); }
+        match self.transport {
+            Transport::Http if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => anyhow::bail!("HTTP MCP server requires an endpoint"),
+            Transport::Stdio if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => Ok(()),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct McpTool {
     pub name: String,
@@ -79,6 +90,8 @@ impl StdioClient {
         args: &[String],
         timeout: Duration,
     ) -> Result<Self> {
+        if program.trim().is_empty() { anyhow::bail!("MCP server program cannot be empty"); }
+        if timeout.is_zero() { anyhow::bail!("MCP timeout must be greater than zero"); }
         let mut child = Command::new(program)
             .args(args)
             .stdin(std::process::Stdio::piped())
@@ -300,5 +313,17 @@ impl HttpClient {
             .await?
             .into_result()?;
         Ok(serde_json::from_value(result)?)
+    }
+}
+
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+    #[test]
+    fn validates_server_config() {
+        assert!(McpServerConfig { name: "".into(), transport: Transport::Stdio, endpoint: None }.validate().is_err());
+        assert!(McpServerConfig { name: "x".into(), transport: Transport::Http, endpoint: None }.validate().is_err());
+        assert!(McpServerConfig { name: "x".into(), transport: Transport::Stdio, endpoint: None }.validate().is_ok());
     }
 }
