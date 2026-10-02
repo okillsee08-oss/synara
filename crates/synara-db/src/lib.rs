@@ -455,9 +455,7 @@ impl Database {
             .query_row("SELECT COUNT(*) FROM tasks", [], |r| r.get(0))?)
     }
 
-    pub fn list_running_tasks(
-        &self,
-    ) -> Result<Vec<synara_core::EntityId>> {
+    pub fn list_running_tasks(&self) -> Result<Vec<synara_core::EntityId>> {
         let mut stmt = self
             .conn
             .prepare("SELECT id FROM tasks WHERE status='running' ORDER BY created_sequence")?;
@@ -469,9 +467,7 @@ impl Database {
         Ok(out)
     }
 
-    pub fn list_running_subagents(
-        &self,
-    ) -> Result<Vec<synara_core::EntityId>> {
+    pub fn list_running_subagents(&self) -> Result<Vec<synara_core::EntityId>> {
         let mut stmt = self
             .conn
             .prepare("SELECT id FROM subagents WHERE status='running' ORDER BY created_sequence")?;
