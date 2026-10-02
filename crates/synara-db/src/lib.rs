@@ -290,6 +290,130 @@ impl Database {
             |r| r.get(0),
         )?)
     }
+    
+    pub fn project_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn workspace_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn thread_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM threads WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn turn_exists(&self, id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM turns WHERE id=?)",
+            [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn list_projects(&self) -> Result<Vec<(synara_core::EntityId, String, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,name,root_path,created_sequence FROM projects ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, u64>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, root_path, sequence) = row?;
+            out.push((id.parse()?, name, root_path, sequence));
+        }
+        Ok(out)
+    }
+
+    pub fn list_workspaces(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,project_id,root_path,created_sequence FROM workspaces ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, u64>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, project_id, root_path, sequence) = row?;
+            out.push((
+                id.parse()?,
+                project_id.parse()?,
+                root_path,
+                sequence,
+            ));
+        }
+        Ok(out)
+    }
+
+    pub fn list_threads(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, Option<String>, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,workspace_id,title,created_sequence FROM threads ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, u64>(3)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, workspace_id, title, sequence) = row?;
+            out.push((id.parse()?, workspace_id.parse()?, title, sequence));
+        }
+        Ok(out)
+    }
+
+    pub fn list_messages(
+        &self,
+    ) -> Result<Vec<(synara_core::EntityId, synara_core::EntityId, String, String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,thread_id,role,content,created_sequence FROM messages ORDER BY created_sequence",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, u64>(4)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, thread_id, role, content, sequence) = row?;
+            out.push((id.parse()?, thread_id.parse()?, role, content, sequence));
+        }
+        Ok(out)
+    }
 
     pub fn projection(&self, key: &str) -> Result<Option<String>> {
         let mut stmt = self.conn.prepare("SELECT value FROM projections WHERE key=?")?;
