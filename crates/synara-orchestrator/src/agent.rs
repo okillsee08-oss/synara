@@ -25,9 +25,6 @@ impl AgentRuntime {
         prompt: &str,
     ) -> Result<String> {
         let session = adapter.start_session(thread_id).await?;
-        let _ = self.events.send(ProviderRuntimeEvent::Started {
-            session: session.clone(),
-        }).await;
         if let Err(error) = adapter.send_turn(&session, prompt).await {
             let _ = self.events.send(ProviderRuntimeEvent::Failed {
                 session: session.clone(),
@@ -44,9 +41,6 @@ impl AgentRuntime {
         session: &str,
     ) -> Result<()> {
         adapter.interrupt(session).await?;
-        let _ = self.events.send(ProviderRuntimeEvent::Completed {
-            session: session.to_string(),
-        }).await;
         Ok(())
     }
 }
