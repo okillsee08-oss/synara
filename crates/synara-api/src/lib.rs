@@ -7,6 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
 
 use synara_core::EntityId;
@@ -131,6 +132,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/threads", get(list_threads).post(create_thread))
         .route("/api/v1/messages", get(list_messages).post(send_message))
         .route("/ws", get(websocket))
+        .layer(CorsLayer::permissive())
+        .fallback_service(ServeDir::new(
+            std::env::var("SYNARA_WEB_DIR").unwrap_or_else(|_| "frontend/web".into()),
+        ))
         .with_state(state)
 }
 
