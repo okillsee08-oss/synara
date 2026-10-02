@@ -54,7 +54,10 @@ impl ProviderAdapter for CliProvider {
             session: session.clone(),
             thread: thread.to_string(),
         });
-        if let Some(stdout) = child.take_stdout() {
+        let stdout = child.take_stdout();
+        self.sessions.lock().await.insert(session.clone(), child);
+
+        if let Some(stdout) = stdout {
             let events = self.events.clone();
             let session_for_task = session.clone();
             let sessions = self.sessions.clone();
@@ -73,7 +76,6 @@ impl ProviderAdapter for CliProvider {
                 }
             });
         }
-        self.sessions.lock().await.insert(session.clone(), child);
         Ok(session)
     }
 
