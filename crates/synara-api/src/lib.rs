@@ -59,7 +59,13 @@ pub struct CreateProjectRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateWorkspaceRequest {\n    pub project_id: EntityId,\n    pub root_path: String,\n}\n\n#[derive(Debug, Deserialize)]\npub struct CreateThreadRequest {
+pub struct CreateWorkspaceRequest {
+    pub project_id: EntityId,
+    pub root_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateThreadRequest {
     pub workspace_id: EntityId,
     pub title: Option<String>,
 }
@@ -83,7 +89,8 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/providers", get(providers))
         .route("/api/v1/summary", get(summary))
         .route("/api/v1/projects", post(create_project))
-        .route("/api/v1/workspaces", post(create_workspace))\n        .route("/api/v1/threads", post(create_thread))
+        .route("/api/v1/workspaces", post(create_workspace))
+        .route("/api/v1/threads", post(create_thread))
         .route("/api/v1/messages", post(send_message))
         .route("/ws", get(websocket))
         .with_state(state)
