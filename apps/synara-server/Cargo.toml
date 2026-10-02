@@ -1,0 +1,17 @@
+[package]
+name="synara-server"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+
+[dependencies]
+anyhow.workspace=true
+axum="0.8"
+tokio={version="1",features=["macros","rt-multi-thread","net"]}
+uuid.workspace=true
+synara-api={path="../../crates/synara-api"}
+synara-db={path="../../crates/synara-db"}
+synara-orchestrator={path="../../crates/synara-orchestrator"}
+synara-providers={path="../../crates/synara-providers"}
+synara-diagnostics={path="../../crates/synara-diagnostics"}
+synara-transport={path="../../crates/synara-transport"}

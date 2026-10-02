@@ -1,0 +1,251 @@
+use anyhow::Result;
+use rusqlite::{params, Connection};
+use std::path::Path;
+use synara_events::Event;
+
+pub struct Database { conn: Connection }
+
+impl Database {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let c = Connection::open(path)?;
+        let db = Self { conn: c };
+        db.migrate()?;
+        Ok(db)
+    }
+
+    pub fn open_memory() -> Result<Self> {
+        let db = Self { conn: Connection::open_in_memory()? };
+        db.migrate()?;
+        Ok(db)
+    }
+
+    fn migrate(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             PRAGMA journal_mode=WAL;
+             CREATE TABLE IF NOT EXISTS schema_migrations(
+                 version INTEGER PRIMARY KEY,
+                 applied_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS events(
+                 event_id TEXT PRIMARY KEY,
+                 sequence INTEGER NOT NULL UNIQUE,
+                 timestamp TEXT NOT NULL,
+                 scope TEXT NOT NULL,
+                 entity_id TEXT NOT NULL,
+                 event_type TEXT NOT NULL,
+                 version INTEGER NOT NULL,
+                 payload TEXT NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(sequence);
+             CREATE INDEX IF NOT EXISTS idx_events_scope_entity ON events(scope,entity_id);
+             CREATE TABLE IF NOT EXISTS projections(
+                 key TEXT PRIMARY KEY,
+                 value TEXT NOT NULL,
+                 updated_sequence INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE TABLE IF NOT EXISTS projects(
+                 id TEXT PRIMARY KEY,
+                 name TEXT NOT NULL,
+                 root_path TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS workspaces(
+                 id TEXT PRIMARY KEY,
+                 project_id TEXT NOT NULL,
+                 root_path TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS turns(
+                 id TEXT PRIMARY KEY,
+                 thread_id TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS approvals(
+                 id TEXT PRIMARY KEY,
+                 tool_call_id TEXT NOT NULL,
+                 approved INTEGER,
+                 updated_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS threads(
+                 id TEXT PRIMARY KEY,
+                 workspace_id TEXT NOT NULL,
+                 title TEXT,
+                 created_sequence INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS messages(
+                 id TEXT PRIMARY KEY,
+                 thread_id TEXT NOT NULL,
+                 role TEXT NOT NULL,
+                 content TEXT NOT NULL,
+                 created_sequence INTEGER NOT NULL
+             );",
+        )?;
+        Ok(())
+    }
+
+    pub fn append_event(&self, e: &Event) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO events(event_id,sequence,timestamp,scope,entity_id,event_type,version,payload)
+             VALUES(?,?,?,?,?,?,?,?)",
+            params![
+                e.event_id.to_string(), e.sequence, e.timestamp.to_rfc3339(),
+                e.scope, e.entity_id.to_string(), e.event_type, e.version, e.payload.to_string()
+            ],
+        )?;
+
+        match e.event_type.as_str() {
+            "ProjectCreated" => {
+                self.conn.execute(
+                    "INSERT INTO projects(id,name,root_path,created_sequence) VALUES(?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["name"].as_str().unwrap_or_default(),
+                        e.payload["root_path"].as_str().unwrap_or_default(),
+                        e.sequence
+                    ],
+                )?;
+            }
+            "WorkspaceCreated" => {
+                self.conn.execute(
+                    "INSERT INTO workspaces(id,project_id,root_path,created_sequence) VALUES(?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["project_id"].to_string().trim_matches('"'),
+                        e.payload["root_path"].as_str().unwrap_or_default(),
+                        e.sequence
+                    ],
+                )?;
+            }
+            "ThreadCreated" => {
+                self.conn.execute(
+                    "INSERT INTO threads(id,workspace_id,title,created_sequence) VALUES(?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["workspace_id"].to_string().trim_matches('"'),
+                        e.payload["title"].as_str(),
+                        e.sequence
+                    ],
+                )?;
+            }
+            "TurnStarted" => {
+                self.conn.execute(
+                    "INSERT INTO turns(id,thread_id,status,created_sequence,updated_sequence) VALUES(?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["thread_id"].to_string().trim_matches('"'),
+                        "running",
+                        e.sequence,
+                        e.sequence
+                    ],
+                )?;
+            }
+            "TurnStopped" => {
+                self.conn.execute(
+                    "UPDATE turns SET status='cancelled', updated_sequence=? WHERE id=?",
+                    params![e.sequence, e.entity_id.to_string()],
+                )?;
+            }
+            "ToolApproved" | "ToolRejected" => {
+                self.conn.execute(
+                    "INSERT INTO approvals(id,tool_call_id,approved,updated_sequence) VALUES(?,?,?,?)
+                     ON CONFLICT(id) DO UPDATE SET approved=excluded.approved,updated_sequence=excluded.updated_sequence",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["tool_call_id"].to_string().trim_matches('"'),
+                        e.payload["approved"].as_bool().map(|v| if v { 1 } else { 0 }),
+                        e.sequence
+                    ],
+                )?;
+            }
+            "MessageCreated" => {
+                self.conn.execute(
+                    "INSERT INTO messages(id,thread_id,role,content,created_sequence) VALUES(?,?,?,?,?)",
+                    params![
+                        e.entity_id.to_string(),
+                        e.payload["thread_id"].to_string().trim_matches('"'),
+                        "user",
+                        e.payload["content"].as_str().unwrap_or_default(),
+                        e.sequence
+                    ],
+                )?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn events_after(&self, seq: u64) -> Result<Vec<Event>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT event_id,sequence,timestamp,scope,entity_id,event_type,version,payload
+             FROM events WHERE sequence>? ORDER BY sequence",
+        )?;
+        let rows = stmt.query_map([seq], |r| {
+            Ok((
+                r.get::<_, String>(0)?, r.get::<_, u64>(1)?, r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?,
+                r.get::<_, u32>(6)?, r.get::<_, String>(7)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let r = row?;
+            out.push(Event {
+                event_id: r.0.parse()?,
+                sequence: r.1,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&r.2)?.with_timezone(&chrono::Utc),
+                scope: r.3,
+                entity_id: r.4.parse()?,
+                event_type: r.5,
+                version: r.6,
+                payload: serde_json::from_str(&r.7)?,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn project_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?)
+    }
+
+    pub fn thread_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM threads", [], |r| r.get(0))?)
+    }
+
+    pub fn workspace_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM workspaces", [], |r| r.get(0))?)
+    }
+
+    pub fn turn_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM turns", [], |r| r.get(0))?)
+    }
+
+    pub fn approval_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM approvals", [], |r| r.get(0))?)
+    }
+
+    pub fn message_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))?)
+    }
+
+    pub fn projection(&self, key: &str) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare("SELECT value FROM projections WHERE key=?")?;
+        let mut rows = stmt.query([key])?;
+        Ok(rows.next()?.map(|row| row.get(0)).transpose()?)
+    }
+
+    pub fn set_projection(&self, key: &str, value: &str, sequence: u64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO projections(key,value,updated_sequence) VALUES(?,?,?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_sequence=excluded.updated_sequence",
+            params![key, value, sequence],
+        )?;
+        Ok(())
+    }
+
+    pub fn latest_sequence(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COALESCE(MAX(sequence),0) FROM events", [], |r| r.get(0))?)
+    }
+}

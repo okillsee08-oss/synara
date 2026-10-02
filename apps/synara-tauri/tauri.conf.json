@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Synara",
+  "version": "0.1.0",
+  "identifier": "com.synara.app",
+  "build": {
+    "frontendDist": "../../frontend/web"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Synara",
+        "width": 1440,
+        "height": 900,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.svg"],
+    "targets": "all"
+  }
+}
