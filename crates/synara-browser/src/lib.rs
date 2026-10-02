@@ -8,8 +8,8 @@ impl BrowserSession {
     pub fn validate_url(url: &str) -> Result<()> {
         let trimmed = url.trim();
         if trimmed.is_empty() { anyhow::bail!("browser URL cannot be empty"); }
-        let parsed = url::Url::parse(trimmed)?;
-        match parsed.scheme() { "http" | "https" => Ok(()), _ => anyhow::bail!("unsupported browser URL scheme") }
+        let scheme = trimmed.split_once("://").map(|(scheme, _)| scheme.to_ascii_lowercase());
+        match scheme.as_deref() { Some("http") | Some("https") => Ok(()), _ => anyhow::bail!("unsupported browser URL scheme") }
     }
 }
 
