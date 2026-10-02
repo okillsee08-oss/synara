@@ -5,6 +5,7 @@ use synara_api::{router, ApiState};
 use synara_db::Database;
 use synara_diagnostics::init;
 use synara_orchestrator::Orchestrator;
+use synara_providers::ProviderRegistry;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,12 +16,15 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| PathBuf::from("synara.db"));
     let db = Database::open(db_path)?;
     let orchestrator = Orchestrator::new(db)?;
+    let mut providers = ProviderRegistry::new();
+    providers.register_builtins();
 
     let state = ApiState {
         name: "synara".into(),
         epoch: 1,
         server_instance_id: Arc::from(uuid::Uuid::new_v4().to_string()),
         orchestrator: Arc::new(Mutex::new(orchestrator)),
+        providers: Arc::new(providers),
     };
 
     let app = router(state);
