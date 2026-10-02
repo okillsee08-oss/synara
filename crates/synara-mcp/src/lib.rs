@@ -91,3 +91,39 @@ impl StdioClient {
         Ok(())
     }
 }
+
+
+pub struct HttpClient {
+    client: reqwest::Client,
+    endpoint: String,
+    next_id: u64,
+}
+
+impl HttpClient {
+    pub fn new(endpoint: impl Into<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            endpoint: endpoint.into(),
+            next_id: 1,
+        }
+    }
+
+    pub async fn request(&mut self, method: &str, params: Value) -> Result<JsonRpcResponse> {
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: self.next_id,
+            method: method.into(),
+            params,
+        };
+        self.next_id += 1;
+        let response = self.client
+            .post(&self.endpoint)
+            .json(&request)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<JsonRpcResponse>()
+            .await?;
+        Ok(response)
+    }
+}
