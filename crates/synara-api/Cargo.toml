@@ -15,3 +15,4 @@ synara-core={path="../synara-core"}
 synara-orchestrator={path="../synara-orchestrator"}
 synara-protocol={path="../synara-protocol"}
 synara-providers={path="../synara-providers"}
+synara-transport={path="../synara-transport"}
