@@ -59,6 +59,12 @@ impl AcpSession {
         args: &[String],
         timeout: Duration,
     ) -> Result<Self> {
+        if program.trim().is_empty() {
+            anyhow::bail!("ACP provider program cannot be empty");
+        }
+        if timeout.is_zero() {
+            anyhow::bail!("ACP timeout must be greater than zero");
+        }
         let mut child = Command::new(program)
             .args(args)
             .stdin(std::process::Stdio::piped())
@@ -182,5 +188,18 @@ mod tests {
             error: Some(serde_json::json!({"code": -1, "message": "boom"})),
         };
         assert!(response.into_result().is_err());
+    }
+}
+
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+    #[tokio::test]
+    async fn rejects_invalid_spawn_configuration() {
+        let err = AcpSession::spawn_with_timeout("  ", &[], Duration::from_secs(1)).await.unwrap_err();
+        assert!(err.to_string().contains("program cannot be empty"));
+        let err = AcpSession::spawn_with_timeout("true", &[], Duration::ZERO).await.unwrap_err();
+        assert!(err.to_string().contains("timeout must be greater than zero"));
     }
 }
