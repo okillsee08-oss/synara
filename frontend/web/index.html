@@ -3,16 +3,322 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synara</title>
+  <title>Synara — Rust V1 Proto</title>
   <style>
-    html,body{margin:0;width:100%;height:100%;background:#111;color:#eee;font-family:system-ui,sans-serif}
-    #app{display:grid;place-items:center;width:100%;height:100%}
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;height:100%;background:#0a0c10;color:#eef2f7}
+    body{overflow:hidden}
+    button,input,textarea,select{font:inherit}
+    button{cursor:pointer}
+    .shell{display:grid;grid-template-columns:310px 1fr;width:100%;height:100%}
+    aside{border-right:1px solid #202632;background:#0e1117;padding:16px;overflow:auto}
+    main{display:grid;grid-template-rows:auto 1fr auto;min-width:0}
+    header{height:64px;border-bottom:1px solid #202632;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
+    .brand{font-size:18px;font-weight:700}
+    .status{font-size:12px;color:#9aa6b2}
+    .section{margin:18px 0}
+    .section h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#7f8a98;margin:0 0 8px}
+    form{display:grid;gap:8px}
+    input,textarea,select{width:100%;border:1px solid #27303d;background:#131821;color:#eef2f7;border-radius:8px;padding:9px 10px;outline:none}
+    input:focus,textarea:focus,select:focus{border-color:#6f7d91}
+    textarea{resize:vertical;min-height:76px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    button{border:1px solid #2c3745;background:#1a2230;color:#fff;border-radius:8px;padding:8px 10px}
+    button.primary{background:#27364a}
+    button.ghost{background:transparent}
+    .list{display:grid;gap:6px}
+    .item{border:1px solid transparent;background:#121720;border-radius:8px;padding:9px;cursor:pointer}
+    .item:hover{border-color:#2a3340}
+    .item.active{border-color:#556579;background:#182130}
+    .muted{color:#8b96a3;font-size:12px}
+    .chat{overflow:auto;padding:20px}
+    .messages{max-width:940px;margin:0 auto;display:grid;gap:14px}
+    .message{padding:12px 14px;border:1px solid #242c37;border-radius:10px;background:#10151d;white-space:pre-wrap;word-break:break-word}
+    .message.user{background:#141c27}
+    .role{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8090a4;margin-bottom:5px}
+    .composer{border-top:1px solid #202632;padding:14px}
+    .composer-inner{max-width:940px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+    .event-log{position:fixed;right:16px;bottom:96px;max-width:380px;display:grid;gap:6px}
+    .toast{background:#111821;border:1px solid #2a3442;padding:8px 10px;border-radius:8px;font-size:12px;box-shadow:0 8px 24px #0008}
+    .empty{display:grid;place-items:center;height:100%;color:#798594}
+    .count{float:right;color:#718097;font-weight:500}
   </style>
 </head>
 <body>
-  <main id="app"><h1>Synara</h1></main>
-  <script>
-    fetch('/health').then(() => {}).catch(() => {});
-  </script>
+<div class="shell">
+  <aside>
+    <div class="brand">Synara <span class="muted">Rust V1 Proto</span></div>
+    <div class="section">
+      <h3>Connection</h3>
+      <div id="connection" class="muted">Connecting…</div>
+      <button id="refresh" class="ghost" style="margin-top:8px;width:100%">Refresh state</button>
+    </div>
+
+    <div class="section">
+      <h3>Projects <span id="projectCount" class="count">0</span></h3>
+      <div id="projects" class="list"></div>
+      <form id="projectForm" style="margin-top:8px">
+        <input id="projectName" placeholder="Project name" required>
+        <input id="projectRoot" placeholder="/workspace/project" required>
+        <button class="primary">Create project</button>
+      </form>
+    </div>
+
+    <div class="section">
+      <h3>Workspace</h3>
+      <form id="workspaceForm">
+        <select id="workspaceProject" required></select>
+        <input id="workspaceRoot" placeholder="/workspace/project" required>
+        <button class="primary">Create workspace</button>
+      </form>
+    </div>
+
+    <div class="section">
+      <h3>Threads</h3>
+      <div id="threads" class="list"></div>
+      <form id="threadForm" style="margin-top:8px">
+        <select id="threadWorkspace" required></select>
+        <input id="threadTitle" placeholder="Thread title">
+        <button class="primary">Create thread</button>
+      </form>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <div id="threadHeading" class="brand">Select a thread</div>
+        <div id="threadSubheading" class="muted"></div>
+      </div>
+      <div id="summary" class="status"></div>
+    </header>
+    <section class="chat">
+      <div id="messages" class="messages">
+        <div class="empty">Create or select a thread to begin.</div>
+      </div>
+    </section>
+    <section class="composer">
+      <form id="messageForm" class="composer-inner">
+        <textarea id="composer" placeholder="Send a message…" disabled required></textarea>
+        <button id="sendButton" class="primary" disabled>Send</button>
+      </form>
+    </section>
+  </main>
+</div>
+<div id="eventLog" class="event-log"></div>
+
+<script>
+(() => {
+  const API = location.protocol === "http:" ? location.origin : "http://127.0.0.1:3210";
+  const state = { projects: [], workspaces: [], threads: [], messages: [], selectedThread: null, latestSequence: 0, ws: null, negotiation: null };
+
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+  function toast(text) {
+    const node = document.createElement("div");
+    node.className = "toast";
+    node.textContent = text;
+    $("eventLog").appendChild(node);
+    setTimeout(() => node.remove(), 4200);
+  }
+
+  async function request(path, options={}) {
+    const response = await fetch(API + path, { headers: {"Content-Type":"application/json", ...(options.headers || {})}, ...options });
+    if (!response.ok) {
+      let detail = response.statusText;
+      try { const body = await response.json(); detail = body.message || body.error || detail; } catch {}
+      throw new Error(detail);
+    }
+    return response.status === 204 ? null : response.json();
+  }
+
+  async function refresh() {
+    try {
+      const [projects, workspaces, threads, messages, summary] = await Promise.all([
+        request("/api/v1/projects"),
+        request("/api/v1/workspaces"),
+        request("/api/v1/threads"),
+        request("/api/v1/messages"),
+        request("/api/v1/summary")
+      ]);
+      state.projects = projects;
+      state.workspaces = workspaces;
+      state.threads = threads;
+      state.messages = messages;
+      state.latestSequence = summary.latest_sequence;
+      render();
+      $("summary").textContent = `P ${summary.projects} · W ${summary.workspaces} · T ${summary.threads} · M ${summary.messages}`;
+    } catch (error) {
+      $("connection").textContent = "Server unavailable";
+      $("connection").style.color = "#d88989";
+      toast(error.message);
+    }
+  }
+
+  function render() {
+    $("projectCount").textContent = state.projects.length;
+    $("projects").innerHTML = state.projects.map(p => `
+      <div class="item">
+        <div>${esc(p.name)}</div>
+        <div class="muted">${esc(p.root_path)}</div>
+      </div>`).join("") || '<div class="muted">No projects yet.</div>';
+
+    const projectOptions = state.projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    $("workspaceProject").innerHTML = projectOptions || '<option value="">Create a project first</option>';
+    $("threadWorkspace").innerHTML = state.workspaces.map(w => {
+      const project = state.projects.find(p => p.id === w.project_id);
+      return `<option value="${w.id}">${esc(project ? project.name : w.project_id)} · ${esc(w.root_path)}</option>`;
+    }).join("") || '<option value="">Create a workspace first</option>';
+
+    $("threads").innerHTML = state.threads.map(t => `
+      <div class="item ${t.id === state.selectedThread ? "active" : ""}" data-thread="${t.id}">
+        <div>${esc(t.title || "Untitled thread")}</div>
+        <div class="muted">${esc(t.id)}</div>
+      </div>`).join("") || '<div class="muted">No threads yet.</div>';
+
+    document.querySelectorAll("[data-thread]").forEach(node => node.onclick = () => {
+      state.selectedThread = node.dataset.thread;
+      renderThread();
+      render();
+    });
+    renderThread();
+  }
+
+  function renderThread() {
+    const thread = state.threads.find(t => t.id === state.selectedThread);
+    if (!thread) {
+      $("threadHeading").textContent = "Select a thread";
+      $("threadSubheading").textContent = "";
+      $("messages").innerHTML = '<div class="empty">Create or select a thread to begin.</div>';
+      $("composer").disabled = true;
+      $("sendButton").disabled = true;
+      return;
+    }
+    const messages = state.messages.filter(m => m.thread_id === thread.id);
+    $("threadHeading").textContent = thread.title || "Untitled thread";
+    $("threadSubheading").textContent = thread.id;
+    $("messages").innerHTML = messages.map(m => `
+      <article class="message ${m.role === "user" ? "user" : ""}">
+        <div class="role">${esc(m.role)}</div>
+        <div>${esc(m.content)}</div>
+      </article>`).join("") || '<div class="empty">No messages yet.</div>';
+    $("composer").disabled = false;
+    $("sendButton").disabled = false;
+    $("composer").focus();
+    const chat = document.querySelector(".chat");
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function negotiate() {
+    const result = await request("/ws/negotiate?epoch=1&minRevision=1&maxRevision=1&clientBuild=V1-Proto");
+    state.negotiation = result;
+    $("connection").textContent = `Connected · rev ${result.negotiated_revision}`;
+    $("connection").style.color = "#8fc49a";
+    return result;
+  }
+
+  async function connectWebSocket() {
+    try {
+      const n = state.negotiation || await negotiate();
+      if (state.ws) state.ws.close();
+      const scheme = API.startsWith("https") ? "wss" : "ws";
+      const url = new URL(API.replace(/^http/, scheme) + "/ws");
+      url.searchParams.set("epoch", n.epoch);
+      url.searchParams.set("revision", n.negotiated_revision);
+      url.searchParams.set("clientBuild", "V1-Proto");
+      url.searchParams.set("serverInstance", n.server_instance_id);
+      url.searchParams.set("last_sequence", state.latestSequence);
+      const ws = new WebSocket(url);
+      state.ws = ws;
+      ws.onopen = () => $("connection").textContent = `Live · rev ${n.negotiated_revision}`;
+      ws.onmessage = async event => {
+        try {
+          const message = JSON.parse(event.data);
+          if (typeof message.sequence === "number") state.latestSequence = Math.max(state.latestSequence, message.sequence);
+          if (message.type === "resync_required") {
+            toast("Live stream requested a resync.");
+            await refresh();
+            await connectWebSocket();
+            return;
+          }
+          if (message.type === "event") {
+            toast(message.event_type || message.payload?.event_type || "New event");
+            await refresh();
+          }
+        } catch {}
+      };
+      ws.onclose = () => {
+        $("connection").textContent = "Disconnected";
+        $("connection").style.color = "#d0a06f";
+        setTimeout(() => connectWebSocket().catch(() => {}), 1500);
+      };
+      ws.onerror = () => {};
+    } catch (error) {
+      $("connection").textContent = "Server unavailable";
+      $("connection").style.color = "#d88989";
+      throw error;
+    }
+  }
+
+  $("projectForm").onsubmit = async event => {
+    event.preventDefault();
+    try {
+      await request("/api/v1/projects", {method:"POST", body:JSON.stringify({
+        name: $("projectName").value.trim(),
+        root_path: $("projectRoot").value.trim()
+      })});
+      $("projectForm").reset();
+      await refresh();
+      toast("Project created");
+    } catch (error) { toast(error.message); }
+  };
+
+  $("workspaceForm").onsubmit = async event => {
+    event.preventDefault();
+    try {
+      await request("/api/v1/workspaces", {method:"POST", body:JSON.stringify({
+        project_id: $("workspaceProject").value,
+        root_path: $("workspaceRoot").value.trim()
+      })});
+      $("workspaceRoot").value = "";
+      await refresh();
+      toast("Workspace created");
+    } catch (error) { toast(error.message); }
+  };
+
+  $("threadForm").onsubmit = async event => {
+    event.preventDefault();
+    try {
+      const body = {workspace_id:$("threadWorkspace").value, title:$("threadTitle").value.trim() || null};
+      const result = await request("/api/v1/threads", {method:"POST", body:JSON.stringify(body)});
+      $("threadForm").reset();
+      await refresh();
+      state.selectedThread = result.id;
+      render();
+      toast("Thread created");
+    } catch (error) { toast(error.message); }
+  };
+
+  $("messageForm").onsubmit = async event => {
+    event.preventDefault();
+    const content = $("composer").value.trim();
+    if (!state.selectedThread || !content) return;
+    try {
+      await request("/api/v1/messages", {method:"POST", body:JSON.stringify({
+        thread_id: state.selectedThread,
+        content
+      })});
+      $("composer").value = "";
+      await refresh();
+    } catch (error) { toast(error.message); }
+  };
+
+  $("refresh").onclick = refresh;
+
+  refresh().then(() => connectWebSocket()).catch(() => {});
+})();
+</script>
 </body>
 </html>
