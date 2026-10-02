@@ -8,5 +8,5 @@ license.workspace=true
 anyhow.workspace=true
 serde.workspace=true
 serde_json.workspace=true
-tokio={version="1",features=["process","io-util"]}
+tokio={version="1",features=["process","io-util","time"]}
 reqwest.workspace=true
