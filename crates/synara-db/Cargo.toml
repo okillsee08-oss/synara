@@ -3,8 +3,10 @@ name="synara-db"
 version.workspace=true
 edition.workspace=true
 license.workspace=true
+
 [dependencies]
 anyhow.workspace=true
+chrono.workspace=true
 rusqlite={version="0.32",features=["bundled"]}
-synara-events={path="../synara-events"}
 serde_json.workspace=true
+synara-events={path="../synara-events"}
