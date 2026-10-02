@@ -1,33 +1,37 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
-pub enum Transport { Stdio, Http }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Transport {
+    Stdio,
+    Http,
+}
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub name: String,
     pub transport: Transport,
     pub endpoint: Option<String>,
 }
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct McpTool {
     pub name: String,
     pub description: Option<String>,
     pub input_schema: Value,
 }
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ToolResult {
     pub content: Vec<Value>,
     pub is_error: bool,
 }
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
     pub id: u64,
@@ -36,7 +40,7 @@ pub struct JsonRpcRequest {
     pub params: Value,
 }
 
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
     pub id: u64,
@@ -44,15 +48,37 @@ pub struct JsonRpcResponse {
     pub error: Option<Value>,
 }
 
+impl JsonRpcResponse {
+    pub fn is_error(&self) -> bool {
+        self.error.is_some()
+    }
+
+    pub fn into_result(self) -> Result<Value> {
+        match self.error {
+            Some(error) => anyhow::bail!("MCP JSON-RPC error: {error}"),
+            None => Ok(self.result.unwrap_or(Value::Null)),
+        }
+    }
+}
+
 pub struct StdioClient {
     child: Child,
     stdin: tokio::process::ChildStdin,
     stdout: BufReader<tokio::process::ChildStdout>,
     next_id: u64,
+    timeout: Duration,
 }
 
 impl StdioClient {
     pub async fn spawn(program: &str, args: &[String]) -> Result<Self> {
+        Self::spawn_with_timeout(program, args, Duration::from_secs(60)).await
+    }
+
+    pub async fn spawn_with_timeout(
+        program: &str,
+        args: &[String],
+        timeout: Duration,
+    ) -> Result<Self> {
         let mut child = Command::new(program)
             .args(args)
             .stdin(std::process::Stdio::piped())
@@ -62,7 +88,13 @@ impl StdioClient {
             .with_context(|| format!("failed to spawn MCP server {program}"))?;
         let stdin = child.stdin.take().context("MCP stdin unavailable")?;
         let stdout = child.stdout.take().context("MCP stdout unavailable")?;
-        Ok(Self { child, stdin, stdout: BufReader::new(stdout), next_id: 1 })
+        Ok(Self {
+            child,
+            stdin,
+            stdout: BufReader::new(stdout),
+            next_id: 1,
+            timeout,
+        })
     }
 
     pub async fn request(&mut self, method: &str, params: Value) -> Result<JsonRpcResponse> {
@@ -73,17 +105,99 @@ impl StdioClient {
             params,
         };
         self.next_id += 1;
+        let request_id = request.id;
+
         let mut line = serde_json::to_vec(&request)?;
         line.push(b'\n');
         self.stdin.write_all(&line).await?;
         self.stdin.flush().await?;
 
-        let mut response = String::new();
-        self.stdout.read_line(&mut response).await?;
-        if response.trim().is_empty() {
-            anyhow::bail!("MCP server closed stdout without a response");
-        }
-        Ok(serde_json::from_str(response.trim())?)
+        tokio::time::timeout(self.timeout, async {
+            loop {
+                let mut response = String::new();
+                let bytes = self.stdout.read_line(&mut response).await?;
+                if bytes == 0 {
+                    anyhow::bail!("MCP server closed stdout without a matching response");
+                }
+                if response.trim().is_empty() {
+                    continue;
+                }
+
+                let value: Value = serde_json::from_str(response.trim())
+                    .context("invalid MCP JSON-RPC message")?;
+
+                if value.get("id").is_none() {
+                    continue;
+                }
+
+                let parsed: JsonRpcResponse = serde_json::from_value(value)
+                    .context("invalid MCP JSON-RPC response")?;
+                if parsed.jsonrpc != "2.0" {
+                    anyhow::bail!("unsupported JSON-RPC version: {}", parsed.jsonrpc);
+                }
+                if parsed.id != request_id {
+                    continue;
+                }
+                return Ok(parsed);
+            }
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("MCP request timed out after {:?}", self.timeout))?
+    }
+
+    pub async fn initialize_legacy(
+        &mut self,
+        protocol_version: &str,
+        client_name: &str,
+        client_version: &str,
+    ) -> Result<JsonRpcResponse> {
+        self.request(
+            "initialize",
+            serde_json::json!({
+                "protocolVersion": protocol_version,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": client_name,
+                    "version": client_version
+                }
+            }),
+        )
+        .await
+    }
+
+    pub async fn discover_server(&mut self) -> Result<JsonRpcResponse> {
+        self.request("server/discover", Value::Null).await
+    }
+
+    pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
+        let result = self
+            .request("tools/list", Value::Null)
+            .await?
+            .into_result()?;
+        let tools = result
+            .get("tools")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("MCP tools/list returned no tools array"))?;
+
+        Ok(tools
+            .iter()
+            .cloned()
+            .map(serde_json::from_value)
+            .collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    pub async fn call_tool(&mut self, name: &str, arguments: Value) -> Result<ToolResult> {
+        let result = self
+            .request(
+                "tools/call",
+                serde_json::json!({
+                    "name": name,
+                    "arguments": arguments
+                }),
+            )
+            .await?
+            .into_result()?;
+        Ok(serde_json::from_value(result)?)
     }
 
     pub async fn shutdown(&mut self) -> Result<()> {
@@ -92,19 +206,24 @@ impl StdioClient {
     }
 }
 
-
 pub struct HttpClient {
     client: reqwest::Client,
     endpoint: String,
     next_id: u64,
+    timeout: Duration,
 }
 
 impl HttpClient {
     pub fn new(endpoint: impl Into<String>) -> Self {
+        Self::with_timeout(endpoint, Duration::from_secs(60))
+    }
+
+    pub fn with_timeout(endpoint: impl Into<String>, timeout: Duration) -> Self {
         Self {
             client: reqwest::Client::new(),
             endpoint: endpoint.into(),
             next_id: 1,
+            timeout,
         }
     }
 
@@ -116,8 +235,10 @@ impl HttpClient {
             params,
         };
         self.next_id += 1;
-        let response = self.client
+        let response = self
+            .client
             .post(&self.endpoint)
+            .timeout(self.timeout)
             .json(&request)
             .send()
             .await?
@@ -125,5 +246,59 @@ impl HttpClient {
             .json::<JsonRpcResponse>()
             .await?;
         Ok(response)
+    }
+
+    pub async fn initialize_legacy(
+        &mut self,
+        protocol_version: &str,
+        client_name: &str,
+        client_version: &str,
+    ) -> Result<JsonRpcResponse> {
+        self.request(
+            "initialize",
+            serde_json::json!({
+                "protocolVersion": protocol_version,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": client_name,
+                    "version": client_version
+                }
+            }),
+        )
+        .await
+    }
+
+    pub async fn discover_server(&mut self) -> Result<JsonRpcResponse> {
+        self.request("server/discover", Value::Null).await
+    }
+
+    pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
+        let result = self
+            .request("tools/list", Value::Null)
+            .await?
+            .into_result()?;
+        let tools = result
+            .get("tools")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow::anyhow!("MCP tools/list returned no tools array"))?;
+        Ok(tools
+            .iter()
+            .cloned()
+            .map(serde_json::from_value)
+            .collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    pub async fn call_tool(&mut self, name: &str, arguments: Value) -> Result<ToolResult> {
+        let result = self
+            .request(
+                "tools/call",
+                serde_json::json!({
+                    "name": name,
+                    "arguments": arguments
+                }),
+            )
+            .await?
+            .into_result()?;
+        Ok(serde_json::from_value(result)?)
     }
 }
