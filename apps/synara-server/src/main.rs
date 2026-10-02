@@ -6,6 +6,7 @@ use synara_db::Database;
 use synara_diagnostics::init;
 use synara_orchestrator::Orchestrator;
 use synara_providers::ProviderRegistry;
+use synara_transport::EventBus;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -25,6 +26,7 @@ async fn main() -> Result<()> {
         server_instance_id: Arc::from(uuid::Uuid::new_v4().to_string()),
         orchestrator: Arc::new(Mutex::new(orchestrator)),
         providers: Arc::new(providers),
+        events: EventBus::new(1024),
     };
 
     let app = router(state);
