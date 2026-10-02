@@ -43,7 +43,7 @@ impl ProviderAdapter for CodexProvider {
         }
     }
 
-    async fn start_session(&self, _thread: &str) -> Result<String> {
+    async fn start_session(&self, thread: &str) -> Result<String> {
         let session = Uuid::new_v4().to_string();
         self.sessions.lock().await.insert(
             session.clone(),
@@ -56,6 +56,7 @@ impl ProviderAdapter for CodexProvider {
         );
         let _ = self.events.send(ProviderRuntimeEvent::Started {
             session: session.clone(),
+            thread: thread.to_string(),
         });
         Ok(session)
     }
