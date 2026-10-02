@@ -13,6 +13,7 @@ use synara_core::EntityId;
 use synara_orchestrator::{Command, Orchestrator};
 use synara_protocol::{ApiError, Envelope, ReplayResponse, WsNegotiation, CURRENT_REVISION};
 use synara_providers::{ProviderMetadata, ProviderRegistry};
+use synara_transport::EventBus;
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -21,6 +22,7 @@ pub struct ApiState {
     pub server_instance_id: Arc<str>,
     pub orchestrator: Arc<Mutex<Orchestrator>>,
     pub providers: Arc<ProviderRegistry>,
+    pub events: EventBus<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,6 +194,7 @@ async fn create_project(
         name: req.name,
         root_path: req.root_path,
     }).map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
 
@@ -204,6 +207,7 @@ async fn create_thread(
         workspace_id: req.workspace_id,
         title: req.title,
     }).map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
 
@@ -225,6 +229,7 @@ async fn send_message(
         thread_id: req.thread_id,
         content: req.content,
     }).map_err(internal_error)?;
+    publish_latest(&s, &guard).map_err(internal_error)?;
     Ok(Json(CommandResponse { id }))
 }
 
@@ -241,6 +246,7 @@ async fn websocket(
 ) -> Response {
     let state = s.clone();
     ws.on_upgrade(move |mut socket| async move {
+        let mut live = state.events.subscribe();
         use axum::extract::ws::Message;
         let replay = {
             let guard = state.orchestrator.lock().await;
@@ -269,14 +275,39 @@ async fn websocket(
                 }
             }
         }
-        while let Some(Ok(message)) = socket.recv().await {
-            match message {
-                Message::Ping(data) => {
-                    let _ = socket.send(Message::Pong(data)).await;
+        loop {
+            tokio::select! {
+                incoming = socket.recv() => {
+                    match incoming {
+                        Some(Ok(Message::Ping(data))) => {
+                            let _ = socket.send(Message::Pong(data)).await;
+                        }
+                        Some(Ok(Message::Text(text))) if text == "close" => break,
+                        Some(Ok(Message::Close(_))) | None => break,
+                        Some(Ok(_)) => {}
+                        Some(Err(_)) => break,
+                    }
                 }
-                Message::Text(text) if text == "close" => break,
-                Message::Close(_) => break,
-                _ => {}
+                event = live.recv() => {
+                    match event {
+                        Ok(envelope) => {
+                            let message = serde_json::json!({
+                                "type": "event",
+                                "revision": envelope.revision,
+                                "sequence": envelope.sequence,
+                                "payload": envelope.payload,
+                            });
+                            if socket.send(Message::Text(message.to_string().into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            let _ = socket.send(Message::Text(serde_json::json!({"type":"resync_required"}).to_string().into())).await;
+                            break;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
             }
         }
     })
@@ -290,4 +321,21 @@ fn internal_error(error: anyhow::Error) -> (axum::http::StatusCode, Json<ApiErro
             message: error.to_string(),
         }),
     )
+}
+
+
+fn publish_latest(s: &ApiState, guard: &Orchestrator) -> anyhow::Result<()> {
+    let latest = guard.db.latest_sequence()?;
+    if let Some(event) = guard.db.events_after(latest.saturating_sub(1))?.into_iter().find(|e| e.sequence == latest) {
+        s.events.publish(Envelope {
+            revision: event.version,
+            sequence: event.sequence,
+            payload: serde_json::json!({
+                "event_type": event.event_type,
+                "entity_id": event.entity_id,
+                "payload": event.payload,
+            }),
+        });
+    }
+    Ok(())
 }
