@@ -149,8 +149,10 @@ impl Database {
             |r| r.get(0),
         )?;
         if automation_has_action == 0 {
-            self.conn
-                .execute("ALTER TABLE automations ADD COLUMN action TEXT NOT NULL DEFAULT 'event'", [])?;
+            self.conn.execute(
+                "ALTER TABLE automations ADD COLUMN action TEXT NOT NULL DEFAULT 'event'",
+                [],
+            )?;
         }
 
         let has_provider_thread_id: u64 = self.conn.query_row(
@@ -674,7 +676,18 @@ impl Database {
 
     pub fn list_automations(
         &self,
-    ) -> Result<Vec<(synara_core::EntityId, String, String, u64, bool, u32, u64, u64)>> {
+    ) -> Result<
+        Vec<(
+            synara_core::EntityId,
+            String,
+            String,
+            u64,
+            bool,
+            u32,
+            u64,
+            u64,
+        )>,
+    > {
         let mut stmt = self.conn.prepare(
             "SELECT id,name,action,interval_seconds,enabled,retry_attempts,retry_delay_seconds,updated_sequence
              FROM automations ORDER BY created_sequence",

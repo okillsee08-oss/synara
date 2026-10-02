@@ -156,7 +156,8 @@ impl Orchestrator {
                 }
             }
             Command::CreateAutomation { .. }
-            | Command::CreateProject { .. } | Command::ApproveTool { .. } => {}
+            | Command::CreateProject { .. }
+            | Command::ApproveTool { .. } => {}
         }
 
         let (id, scope, event_type, payload) = match command {
