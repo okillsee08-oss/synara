@@ -3,3 +3,11 @@ name="synara-tauri"
 version.workspace=true
 edition.workspace=true
 license.workspace=true
+build="build.rs"
+
+[dependencies]
+tauri={version="2.12",default-features=false,features=["wry"]}
+serde_json.workspace=true
+
+[build-dependencies]
+tauri-build={version="2.7",features=[]}
