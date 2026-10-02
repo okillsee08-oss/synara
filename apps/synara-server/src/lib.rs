@@ -15,7 +15,11 @@ pub async fn run() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("synara.db"));
     let db = Database::open(db_path)?;
-    let orchestrator = Orchestrator::new(db)?;
+    let mut orchestrator = Orchestrator::new(db)?;
+    let recovered = orchestrator.recover_interrupted_runtime()?;
+    if recovered > 0 {
+        println!("Recovered {recovered} interrupted provider session(s)");
+    }
 
     let mut providers = ProviderRegistry::new();
     providers.register_builtins();
