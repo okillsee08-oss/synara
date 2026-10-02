@@ -191,7 +191,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/tasks/:id/complete", post(complete_task))
         .route("/api/v1/tasks/:id/cancel", post(cancel_task))
         .route("/api/v1/tasks/:id/fail", post(fail_task))
-        .route("/api/v1/subagents", get(list_subagents).post(create_subagent))
+        .route(
+            "/api/v1/subagents",
+            get(list_subagents).post(create_subagent),
+        )
         .route("/api/v1/subagents/:id/stop", post(stop_subagent))
         .route("/ws", get(websocket))
         .layer(CorsLayer::permissive())
@@ -403,13 +406,15 @@ async fn list_tasks(
         .list_tasks()
         .map_err(internal_error)?
         .into_iter()
-        .map(|(id, thread_id, name, status, created_sequence)| TaskResponse {
-            id,
-            thread_id,
-            name,
-            status,
-            created_sequence,
-        })
+        .map(
+            |(id, thread_id, name, status, created_sequence)| TaskResponse {
+                id,
+                thread_id,
+                name,
+                status,
+                created_sequence,
+            },
+        )
         .collect();
     Ok(Json(tasks))
 }
