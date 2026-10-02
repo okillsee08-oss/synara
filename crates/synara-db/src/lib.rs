@@ -85,14 +85,27 @@ impl Database {
              CREATE TABLE IF NOT EXISTS provider_sessions(
                  id TEXT PRIMARY KEY,
                  provider_kind TEXT NOT NULL,
+                 thread_id TEXT,
                  remote_thread_id TEXT,
                  status TEXT NOT NULL,
                  created_sequence INTEGER NOT NULL,
                  updated_sequence INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS idx_provider_sessions_status ON provider_sessions(status);
-             CREATE INDEX IF NOT EXISTS idx_provider_sessions_provider ON provider_sessions(provider_kind);",
+             CREATE INDEX IF NOT EXISTS idx_provider_sessions_provider ON provider_sessions(provider_kind);
+             CREATE INDEX IF NOT EXISTS idx_provider_sessions_thread ON provider_sessions(thread_id);",
         )?;
+
+        let has_provider_thread_id: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('provider_sessions') WHERE name='thread_id'",
+            [],
+            |r| r.get(0),
+        )?;
+        if has_provider_thread_id == 0 {
+            self.conn
+                .execute("ALTER TABLE provider_sessions ADD COLUMN thread_id TEXT", [])?;
+        }
+
         Ok(())
     }
 
@@ -187,11 +200,12 @@ impl Database {
             }
             "ProviderSessionStarted" => {
                 tx.execute(
-                    "INSERT INTO provider_sessions(id,provider_kind,remote_thread_id,status,created_sequence,updated_sequence)
-                     VALUES(?,?,?,?,?,?)",
+                    "INSERT INTO provider_sessions(id,provider_kind,thread_id,remote_thread_id,status,created_sequence,updated_sequence)
+                     VALUES(?,?,?,?,?,?,?)",
                     params![
                         e.entity_id.to_string(),
                         e.payload["provider_kind"].as_str().unwrap_or_default(),
+                        e.payload["thread"].as_str(),
                         e.payload["remote_thread_id"].as_str(),
                         "running",
                         e.sequence,
@@ -319,6 +333,14 @@ impl Database {
         Ok(self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM turns WHERE id=?)",
             [id.to_string()],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn running_turn_exists(&self, thread_id: synara_core::EntityId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM turns WHERE thread_id=? AND status='running')",
+            [thread_id.to_string()],
             |r| r.get(0),
         )?)
     }
