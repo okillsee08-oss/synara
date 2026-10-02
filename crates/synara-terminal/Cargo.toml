@@ -3,6 +3,8 @@ name="synara-terminal"
 version.workspace=true
 edition.workspace=true
 license.workspace=true
+
 [dependencies]
-synara-process={path="../synara-process"}
 anyhow.workspace=true
+portable-pty="0.9"
+tokio={version="1",features=["io-util","sync"]}
