@@ -1,0 +1,8 @@
+[package]
+name="synara-server"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[dependencies]
+synara-core={path="../../crates/synara-core"}
+synara-domain={path="../../crates/synara-domain"}
