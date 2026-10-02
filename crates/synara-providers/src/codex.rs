@@ -196,8 +196,8 @@ impl ProviderAdapter for CodexProvider {
             return Ok(());
         }
 
-        if let Some(process) = guard.process.as_mut() {
-            process.terminate().await?;
+        if let Some(process) = guard.process.as_ref() {
+            process.lock().await.terminate().await?;
         }
         guard.process = None;
         guard.running = false;
