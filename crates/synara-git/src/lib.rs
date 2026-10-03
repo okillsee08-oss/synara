@@ -51,7 +51,13 @@ pub fn branches(path: impl AsRef<Path>) -> Result<Vec<String>> {
         .collect())
 }
 
+pub fn validate_branch_name(name: &str) -> Result<()> {
+    if name.trim().is_empty() || name.starts_with('-') || name.contains("..") { anyhow::bail!("invalid branch name"); }
+    Ok(())
+}
+
 pub fn create_branch(path: impl AsRef<Path>, name: &str) -> Result<()> {
+    validate_branch_name(name)?;
     let repo = open(path)?;
     let head = repo.head()?.peel_to_commit()?;
     repo.branch(name, &head, false)?;
