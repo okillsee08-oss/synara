@@ -99,7 +99,13 @@ impl Scheduler {
                 }
             }
 
-            jobs.lock().await.remove(&task_id);
+            let mut jobs = jobs.lock().await;
+            if jobs
+                .get(&task_id)
+                .is_some_and(|(current_generation, _)| *current_generation == generation)
+            {
+                jobs.remove(&task_id);
+            }
         });
 
         AutomationHandle { id, cancel, join }
