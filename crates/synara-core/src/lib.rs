@@ -17,6 +17,10 @@ impl EntityId {
         self.0
     }
 
+    pub fn from_uuid(id: Uuid) -> Self {
+        Self(id)
+    }
+
     pub fn is_nil(&self) -> bool {
         self.0.is_nil()
     }
