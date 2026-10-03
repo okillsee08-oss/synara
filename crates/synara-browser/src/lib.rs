@@ -13,6 +13,10 @@ impl BrowserSession {
             anyhow::bail!("browser URL cannot be empty");
         }
 
+        if trimmed.chars().any(char::is_whitespace) {
+            anyhow::bail!("browser URL must not contain whitespace");
+        }
+
         let scheme = trimmed
             .split_once("://")
             .map(|(scheme, _)| scheme.to_ascii_lowercase());
@@ -38,5 +42,6 @@ mod tests {
         assert!(BrowserSession::validate_url(" ").is_err());
         assert!(BrowserSession::validate_url("file:///tmp/a").is_err());
         assert!(BrowserSession::validate_url("https://example.com").is_ok());
+        assert!(BrowserSession::validate_url("https://example.com/a b").is_err());
     }
 }
