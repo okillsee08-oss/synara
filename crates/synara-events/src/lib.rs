@@ -2,6 +2,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use synara_core::{EntityId, Revision, Sequence, Timestamp};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
     pub event_id: EntityId,
@@ -13,6 +14,7 @@ pub struct Event {
     pub version: Revision,
     pub payload: Value,
 }
+
 impl Event {
     pub fn new(
         scope: impl Into<String>,
