@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::{cors::CorsLayer, services::ServeDir};
-use uuid::Uuid;
 
 use synara_core::EntityId;
 use synara_orchestrator::{Command, Orchestrator};
@@ -348,6 +347,8 @@ async fn summary(
         approvals: db.approval_count().map_err(internal_error)?,
         messages: db.message_count().map_err(internal_error)?,
         provider_sessions: db.provider_session_count().map_err(internal_error)?,
+        tasks: db.task_count().map_err(internal_error)?,
+        subagents: db.subagent_count().map_err(internal_error)?,
         provider_count: s.providers.list().len(),
     }))
 }
@@ -576,7 +577,7 @@ async fn kill_terminal(
     State(s): State<ApiState>,
     Path(id): Path<String>,
 ) -> Result<Json<CommandResponse>, (axum::http::StatusCode, Json<ApiError>)> {
-    let terminal = s.terminals.lock().await.remove(&id).map(|(_, value)| value);
+    let terminal = s.terminals.lock().await.remove(&id);
     let terminal = terminal.ok_or_else(|| {
         (
             axum::http::StatusCode::NOT_FOUND,
