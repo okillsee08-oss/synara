@@ -34,6 +34,12 @@ impl CodexProvider {
     }
 }
 
+impl Default for CodexProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ProviderAdapter for CodexProvider {
     fn metadata(&self) -> ProviderMetadata {
@@ -112,11 +118,10 @@ impl ProviderAdapter for CodexProvider {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                    if value.get("type").and_then(Value::as_str) == Some("thread.started") {
-                        if let Some(thread_id) = value.get("thread_id").and_then(Value::as_str) {
-                            parser_state.lock().await.remote_thread_id =
-                                Some(thread_id.to_string());
-                        }
+                    if value.get("type").and_then(Value::as_str) == Some("thread.started")
+                        && let Some(thread_id) = value.get("thread_id").and_then(Value::as_str)
+                    {
+                        parser_state.lock().await.remote_thread_id = Some(thread_id.to_string());
                     }
                     if let Some(event) = parse_codex_event(&session_id, &value) {
                         let terminal = matches!(
