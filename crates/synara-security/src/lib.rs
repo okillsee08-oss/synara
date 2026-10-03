@@ -76,6 +76,10 @@ impl SecurityPolicy {
         }
     }
 
+    pub fn requires_approval(&self, action: SecurityAction) -> bool {
+        self.authorize(action).decision == PolicyDecision::Ask
+    }
+
     pub fn is_allowed(&self, action: SecurityAction) -> bool {
         self.authorize(action).decision == PolicyDecision::Allow
     }
