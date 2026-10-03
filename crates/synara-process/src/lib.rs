@@ -14,6 +14,9 @@ impl ProcessSpec {
         if self.program.trim().is_empty() {
             bail!("process program must not be empty");
         }
+        if self.cwd.as_deref().is_some_and(|cwd| cwd.trim().is_empty()) {
+            bail!("process cwd must not be empty");
+        }
         Ok(())
     }
 }
