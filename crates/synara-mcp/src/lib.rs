@@ -24,8 +24,26 @@ impl McpServerConfig {
             anyhow::bail!("MCP server name cannot be empty");
         }
         match self.transport {
-            Transport::Http if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => anyhow::bail!("HTTP MCP server requires an endpoint"),
-            Transport::Stdio if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => Ok(()),
+            Transport::Http
+                if self
+                    .endpoint
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or("")
+                    .is_empty() =>
+            {
+                anyhow::bail!("HTTP MCP server requires an endpoint")
+            }
+            Transport::Stdio
+                if self
+                    .endpoint
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or("")
+                    .is_empty() =>
+            {
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -322,14 +340,37 @@ impl HttpClient {
     }
 }
 
-
 #[cfg(test)]
 mod hardening_tests {
     use super::*;
     #[test]
     fn validates_server_config() {
-        assert!(McpServerConfig { name: "".into(), transport: Transport::Stdio, endpoint: None }.validate().is_err());
-        assert!(McpServerConfig { name: "x".into(), transport: Transport::Http, endpoint: None }.validate().is_err());
-        assert!(McpServerConfig { name: "x".into(), transport: Transport::Stdio, endpoint: None }.validate().is_ok());
+        assert!(
+            McpServerConfig {
+                name: "".into(),
+                transport: Transport::Stdio,
+                endpoint: None,
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            McpServerConfig {
+                name: "x".into(),
+                transport: Transport::Http,
+                endpoint: None,
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            McpServerConfig {
+                name: "x".into(),
+                transport: Transport::Stdio,
+                endpoint: None,
+            }
+            .validate()
+            .is_ok()
+        );
     }
 }
