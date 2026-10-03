@@ -191,7 +191,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod hardening_tests {
     use super::*;
@@ -206,6 +205,9 @@ mod hardening_tests {
             Err(err) => err,
             Ok(_) => panic!("zero timeout was accepted"),
         };
-        assert!(err.to_string().contains("timeout must be greater than zero"));
+        assert!(
+            err.to_string()
+                .contains("timeout must be greater than zero")
+        );
     }
 }
