@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::process::Stdio;
 use tokio::process::{Child, ChildStderr, ChildStdout, Command};
 
