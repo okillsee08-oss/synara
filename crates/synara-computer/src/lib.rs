@@ -11,6 +11,7 @@ impl Action {
     pub fn validate(&self) -> Result<()> {
         match self {
             Action::Click { x, y } if *x < 0 || *y < 0 => anyhow::bail!("click coordinates cannot be negative"),
+            Action::Click { x, y } if *x > 1_000_000 || *y > 1_000_000 => anyhow::bail!("click coordinates exceed safety bounds"),
             Action::Scroll { dx, dy } if *dx == 0 && *dy == 0 => anyhow::bail!("scroll delta cannot be zero"),
             Action::Key { key } if key.trim().is_empty() => anyhow::bail!("key cannot be empty"),
             Action::Type { text } if text.is_empty() => anyhow::bail!("typed text cannot be empty"),
