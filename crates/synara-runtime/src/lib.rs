@@ -12,6 +12,10 @@ impl Runtime {
             handles: Vec::new(),
         }
     }
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+
     pub fn spawn<F>(&mut self, f: F)
     where
         F: std::future::Future<Output = ()> + Send + 'static,
