@@ -497,21 +497,19 @@ impl Database {
                     .optional()?
                     .unwrap_or_default();
 
-                if let Some(thread_id) = thread_id
-                    && !output.is_empty() {
-                        tx.execute(
-                            "INSERT OR REPLACE INTO messages(
-                                id,thread_id,role,content,created_sequence
-                             ) VALUES(?,?,?,?,?)",
-                            params![
-                                format!("assistant-{}", e.entity_id),
-                                thread_id,
-                                "assistant",
-                                output,
-                                e.sequence
-                            ],
-                        )?;
-                    }
+                if let Some(thread_id) = thread_id && !output.is_empty() {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO messages(
+                            id,thread_id,role,content,created_sequence
+                         ) VALUES(?,?,?,?,?)",
+                        params![
+                            format!("assistant-{}", e.entity_id),
+                            thread_id,
+                            "assistant",
+                            output,
+                            e.sequence
+                        ],
+                    )?;
                 }
 
                 tx.execute(
