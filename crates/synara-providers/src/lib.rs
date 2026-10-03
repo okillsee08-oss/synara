@@ -79,6 +79,10 @@ impl ProviderRegistry {
             .cloned()
     }
 
+    pub fn kinds(&self) -> Vec<String> {
+        self.adapters.iter().map(|adapter| adapter.metadata().kind).collect()
+    }
+
     pub fn list(&self) -> Vec<ProviderMetadata> {
         self.adapters
             .iter()
