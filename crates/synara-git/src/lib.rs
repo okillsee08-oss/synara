@@ -52,7 +52,9 @@ pub fn branches(path: impl AsRef<Path>) -> Result<Vec<String>> {
 }
 
 pub fn validate_branch_name(name: &str) -> Result<()> {
-    if name.trim().is_empty() || name.starts_with('-') || name.contains("..") { anyhow::bail!("invalid branch name"); }
+    if name.trim().is_empty() || name.starts_with('-') || name.contains("..") {
+        anyhow::bail!("invalid branch name");
+    }
     Ok(())
 }
 
