@@ -1,1 +1,7 @@
+# GitHub Linguist: the V1-Proto rewrite is primarily Rust.
+# Keep Rust source files explicitly classified as Rust so the language
+# breakdown reflects the rewrite even while the TypeScript UI remains.
+*.rs linguist-language=Rust
+*.rs linguist-detectable=true
+
 bun.lock text eol=lf
