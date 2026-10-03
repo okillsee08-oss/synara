@@ -3,10 +3,20 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use synara_events::Event;
 
-type ProjectRow = (synara_core::EntityId, String, String, u64);
 type WorkspaceRow = (synara_core::EntityId, synara_core::EntityId, String, u64);
-type ThreadRow = (synara_core::EntityId, synara_core::EntityId, Option<String>, u64);
-type MessageRow = (synara_core::EntityId, synara_core::EntityId, String, String, u64);
+type ThreadRow = (
+    synara_core::EntityId,
+    synara_core::EntityId,
+    Option<String>,
+    u64,
+);
+type MessageRow = (
+    synara_core::EntityId,
+    synara_core::EntityId,
+    String,
+    String,
+    u64,
+);
 type ToolCallRow = (
     synara_core::EntityId,
     Option<synara_core::EntityId>,
@@ -25,7 +35,13 @@ type AutomationRow = (
     u64,
     u64,
 );
-type TaskRow = (synara_core::EntityId, synara_core::EntityId, String, String, u64);
+type TaskRow = (
+    synara_core::EntityId,
+    synara_core::EntityId,
+    String,
+    String,
+    u64,
+);
 type SubagentRow = (
     synara_core::EntityId,
     synara_core::EntityId,
@@ -497,7 +513,9 @@ impl Database {
                     .optional()?
                     .unwrap_or_default();
 
-                if let Some(thread_id) = thread_id && !output.is_empty() {
+                if let Some(thread_id) = thread_id
+                    && !output.is_empty()
+                {
                     tx.execute(
                         "INSERT OR REPLACE INTO messages(
                             id,thread_id,role,content,created_sequence
@@ -814,9 +832,7 @@ impl Database {
         )?)
     }
 
-    pub fn list_tasks(
-        &self,
-    ) -> Result<Vec<MessageRow>> {
+    pub fn list_tasks(&self) -> Result<Vec<TaskRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,thread_id,name,status,created_sequence FROM tasks ORDER BY created_sequence",
         )?;
@@ -956,9 +972,7 @@ impl Database {
         Ok(out)
     }
 
-    pub fn list_threads(
-        &self,
-    ) -> Result<Vec<ThreadRow>> {
+    pub fn list_threads(&self) -> Result<Vec<ThreadRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,workspace_id,title,created_sequence FROM threads ORDER BY created_sequence",
         )?;
@@ -1034,9 +1048,7 @@ impl Database {
             })?)
     }
 
-    pub fn list_approvals(
-        &self,
-    ) -> Result<Vec<ApprovalRow>> {
+    pub fn list_approvals(&self) -> Result<Vec<ApprovalRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,tool_call_id,approved,updated_sequence
              FROM approvals ORDER BY updated_sequence",
