@@ -160,9 +160,7 @@ impl Orchestrator {
                     anyhow::bail!("automation does not exist: {automation_id}");
                 }
             }
-            Command::CreateAutomation { .. }
-            | Command::CreateProject { .. }
-            | Command::ApproveTool { .. } => {}
+            Command::CreateAutomation { .. } | Command::CreateProject { .. } => {}
         }
 
         let (id, scope, event_type, payload) = match command {
