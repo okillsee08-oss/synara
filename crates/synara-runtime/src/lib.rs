@@ -1,6 +1,7 @@
 use anyhow::Result;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+
 pub struct Runtime {
     pub cancellation: CancellationToken,
     handles: Vec<JoinHandle<()>>,
@@ -12,6 +13,7 @@ impl Runtime {
             handles: Vec::new(),
         }
     }
+
     pub fn is_cancelled(&self) -> bool {
         self.cancellation.is_cancelled()
     }
@@ -22,6 +24,7 @@ impl Runtime {
     {
         self.handles.push(tokio::spawn(f));
     }
+
     pub async fn shutdown(mut self) -> Result<()> {
         self.cancellation.cancel();
         for h in self.handles.drain(..) {
