@@ -1,4 +1,12 @@
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    future::Future,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 use tokio::{
     sync::Mutex,
     task::JoinHandle,
@@ -46,12 +54,16 @@ impl AutomationHandle {
 
 #[derive(Clone, Default)]
 pub struct Scheduler {
-    jobs: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    jobs: Arc<Mutex<HashMap<String, (u64, CancellationToken)>>>,
+    next_generation: Arc<AtomicU64>,
 }
 
 impl Scheduler {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            jobs: Arc::new(Mutex::new(HashMap::new())),
+            next_generation: Arc::new(AtomicU64::new(1)),
+        }
     }
 
     pub async fn wait(delay: Duration) {
@@ -73,12 +85,16 @@ impl Scheduler {
         Fut: Future<Output = Result<(), String>> + Send + 'static,
     {
         let id = id.into();
-        if let Some(existing) = self.jobs.lock().await.remove(&id) {
+        if let Some((_, existing)) = self.jobs.lock().await.remove(&id) {
             existing.cancel();
         }
 
+        let generation = self.next_generation.fetch_add(1, Ordering::Relaxed);
         let cancel = CancellationToken::new();
-        self.jobs.lock().await.insert(id.clone(), cancel.clone());
+        self.jobs
+            .lock()
+            .await
+            .insert(id.clone(), (generation, cancel.clone()));
         let jobs = Arc::clone(&self.jobs);
         let task_id = id.clone();
 
