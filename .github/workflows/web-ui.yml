@@ -1,0 +1,41 @@
+name: Synara Web UI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [V1-Proto]
+    paths:
+      - "apps/web/**"
+      - "packages/contracts/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/web-ui.yml"
+  pull_request:
+    branches: [V1-Proto, main]
+    paths:
+      - "apps/web/**"
+      - "packages/contracts/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/web-ui.yml"
+
+concurrency:
+  group: synara-web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd apps/web typecheck
+      - run: bun run --cwd apps/web test
+      - run: bun run --cwd apps/web build
