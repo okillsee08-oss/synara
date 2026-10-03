@@ -87,7 +87,9 @@ pub struct Orchestrator {
 
 impl Orchestrator {
     pub fn validate_message(content: &str) -> Result<()> {
-        if content.trim().is_empty() { anyhow::bail!("message content must not be empty"); }
+        if content.trim().is_empty() {
+            anyhow::bail!("message content must not be empty");
+        }
         Ok(())
     }
 
@@ -443,18 +445,22 @@ mod tests {
         let mut orchestrator = Orchestrator::new(db).unwrap();
 
         let missing = EntityId::new();
-        assert!(orchestrator
-            .dispatch(Command::CreateWorkspace {
-                project_id: missing,
-                root_path: "/tmp/workspace".into(),
-            })
-            .is_err());
-        assert!(orchestrator
-            .dispatch(Command::CreateThread {
-                workspace_id: missing,
-                title: None,
-            })
-            .is_err());
+        assert!(
+            orchestrator
+                .dispatch(Command::CreateWorkspace {
+                    project_id: missing,
+                    root_path: "/tmp/workspace".into(),
+                })
+                .is_err()
+        );
+        assert!(
+            orchestrator
+                .dispatch(Command::CreateThread {
+                    workspace_id: missing,
+                    title: None,
+                })
+                .is_err()
+        );
     }
 
     #[test]
@@ -481,10 +487,14 @@ mod tests {
             })
             .unwrap();
 
-        orchestrator.dispatch(Command::StartTurn { thread_id: thread }).unwrap();
-        assert!(orchestrator
+        orchestrator
             .dispatch(Command::StartTurn { thread_id: thread })
-            .is_err());
+            .unwrap();
+        assert!(
+            orchestrator
+                .dispatch(Command::StartTurn { thread_id: thread })
+                .is_err()
+        );
     }
 
     #[test]
@@ -516,7 +526,9 @@ mod tests {
                 name: "recover".into(),
             })
             .unwrap();
-        orchestrator.dispatch(Command::StartTask { task_id: task }).unwrap();
+        orchestrator
+            .dispatch(Command::StartTask { task_id: task })
+            .unwrap();
 
         assert_eq!(orchestrator.recover_interrupted_runtime().unwrap(), 1);
         assert_eq!(orchestrator.recover_interrupted_runtime().unwrap(), 0);
