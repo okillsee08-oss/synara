@@ -86,6 +86,11 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
+    pub fn validate_message(content: &str) -> Result<()> {
+        if content.trim().is_empty() { anyhow::bail!("message content must not be empty"); }
+        Ok(())
+    }
+
     pub fn new(db: Database) -> Result<Self> {
         Ok(Self { db })
     }
