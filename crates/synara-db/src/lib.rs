@@ -170,6 +170,10 @@ impl Database {
         Ok(())
     }
 
+    pub fn event_count(&self) -> Result<u64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
+    }
+
     pub fn append_event(&self, e: &Event) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
 
