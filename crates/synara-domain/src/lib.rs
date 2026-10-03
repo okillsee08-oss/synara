@@ -8,6 +8,12 @@ macro_rules! id_type {
         #[serde(transparent)]
         pub struct $n(pub EntityId);
 
+        impl Default for $n {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl $n {
             pub fn new() -> Self {
                 Self(EntityId::new())
