@@ -72,9 +72,6 @@ impl Scheduler {
         F: Fn() -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), String>> + Send + 'static,
     {
-        if schedule.interval.is_zero() {
-            panic!("schedule interval must be positive");
-        }
         let id = id.into();
         if let Some(existing) = self.jobs.lock().await.remove(&id) {
             existing.cancel();
