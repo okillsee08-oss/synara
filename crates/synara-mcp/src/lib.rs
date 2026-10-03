@@ -20,7 +20,9 @@ pub struct McpServerConfig {
 
 impl McpServerConfig {
     pub fn validate(&self) -> Result<()> {
-        if self.name.trim().is_empty() { anyhow::bail!("MCP server name cannot be empty"); }
+        if self.name.trim().is_empty() {
+            anyhow::bail!("MCP server name cannot be empty");
+        }
         match self.transport {
             Transport::Http if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => anyhow::bail!("HTTP MCP server requires an endpoint"),
             Transport::Stdio if self.endpoint.as_deref().map(str::trim).unwrap_or("").is_empty() => Ok(()),
@@ -90,8 +92,12 @@ impl StdioClient {
         args: &[String],
         timeout: Duration,
     ) -> Result<Self> {
-        if program.trim().is_empty() { anyhow::bail!("MCP server program cannot be empty"); }
-        if timeout.is_zero() { anyhow::bail!("MCP timeout must be greater than zero"); }
+        if program.trim().is_empty() {
+            anyhow::bail!("MCP server program cannot be empty");
+        }
+        if timeout.is_zero() {
+            anyhow::bail!("MCP timeout must be greater than zero");
+        }
         let mut child = Command::new(program)
             .args(args)
             .stdin(std::process::Stdio::piped())
