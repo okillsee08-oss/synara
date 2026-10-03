@@ -1,3 +1,5 @@
+pub const API_PROTOCOL_VERSION: u32 = 1;
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State, WebSocketUpgrade},
