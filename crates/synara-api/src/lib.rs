@@ -301,26 +301,26 @@ async fn negotiate(
         )
     })?;
     if let Some(epoch) = q.epoch
-        && epoch != s.epoch {
-            return Err((
-                axum::http::StatusCode::UPGRADE_REQUIRED,
-                Json(ApiError {
-                    code: "EPOCH_MISMATCH".into(),
-                    message: "client epoch does not match this server".into(),
-                }),
-            ));
-        }
+        && epoch != s.epoch
+    {
+        return Err((
+            axum::http::StatusCode::UPGRADE_REQUIRED,
+            Json(ApiError {
+                code: "EPOCH_MISMATCH".into(),
+                message: "client epoch does not match this server".into(),
+            }),
+        ));
     }
     if let Some(build) = q.client_build.as_deref()
-        && build.trim().is_empty() {
-            return Err((
-                axum::http::StatusCode::BAD_REQUEST,
-                Json(ApiError {
-                    code: "INVALID_CLIENT_BUILD".into(),
-                    message: "client_build cannot be empty".into(),
-                }),
-            ));
-        }
+        && build.trim().is_empty()
+    {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(ApiError {
+                code: "INVALID_CLIENT_BUILD".into(),
+                message: "client_build cannot be empty".into(),
+            }),
+        ));
     }
     Ok(Json(WsNegotiation {
         epoch: s.epoch,
