@@ -3,20 +3,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 use synara_events::Event;
 
-type WorkspaceRow = (synara_core::EntityId, synara_core::EntityId, String, u64);
-type ThreadRow = (
-    synara_core::EntityId,
-    synara_core::EntityId,
-    Option<String>,
-    u64,
-);
-type MessageRow = (
-    synara_core::EntityId,
-    synara_core::EntityId,
-    String,
-    String,
-    u64,
-);
 type ToolCallRow = (
     synara_core::EntityId,
     Option<synara_core::EntityId>,
@@ -25,6 +11,7 @@ type ToolCallRow = (
     String,
     u64,
 );
+type ProviderSessionRow = (synara_core::EntityId, String, Option<synara_core::EntityId>);
 type AutomationRow = (
     synara_core::EntityId,
     String,
@@ -46,6 +33,19 @@ type SubagentRow = (
     synara_core::EntityId,
     synara_core::EntityId,
     Option<String>,
+    String,
+    u64,
+);
+type ThreadRow = (
+    synara_core::EntityId,
+    synara_core::EntityId,
+    Option<String>,
+    u64,
+);
+type MessageRow = (
+    synara_core::EntityId,
+    synara_core::EntityId,
+    String,
     String,
     u64,
 );
@@ -640,18 +640,7 @@ impl Database {
         )?)
     }
 
-    pub fn list_tool_calls(
-        &self,
-    ) -> Result<
-        Vec<(
-            synara_core::EntityId,
-            Option<synara_core::EntityId>,
-            String,
-            String,
-            String,
-            u64,
-        )>,
-    > {
+    pub fn list_tool_calls(&self) -> Result<Vec<ToolCallRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,turn_id,name,arguments_json,status,created_sequence
              FROM tool_calls ORDER BY created_sequence",
@@ -699,9 +688,7 @@ impl Database {
             .query_row("SELECT COUNT(*) FROM provider_sessions", [], |r| r.get(0))?)
     }
 
-    pub fn list_running_provider_sessions(
-        &self,
-    ) -> Result<Vec<(synara_core::EntityId, String, Option<synara_core::EntityId>)>> {
+    pub fn list_running_provider_sessions(&self) -> Result<Vec<ProviderSessionRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,provider_kind,thread_id
              FROM provider_sessions
@@ -733,20 +720,7 @@ impl Database {
             .query_row("SELECT COUNT(*) FROM automations", [], |r| r.get(0))?)
     }
 
-    pub fn list_automations(
-        &self,
-    ) -> Result<
-        Vec<(
-            synara_core::EntityId,
-            String,
-            String,
-            u64,
-            bool,
-            u32,
-            u64,
-            u64,
-        )>,
-    > {
+    pub fn list_automations(&self) -> Result<Vec<AutomationRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,name,action,interval_seconds,enabled,retry_attempts,retry_delay_seconds,updated_sequence
              FROM automations ORDER BY created_sequence",
@@ -853,17 +827,7 @@ impl Database {
         Ok(out)
     }
 
-    pub fn list_subagents(
-        &self,
-    ) -> Result<
-        Vec<(
-            synara_core::EntityId,
-            synara_core::EntityId,
-            Option<String>,
-            String,
-            u64,
-        )>,
-    > {
+    pub fn list_subagents(&self) -> Result<Vec<SubagentRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,task_id,provider_kind,status,created_sequence FROM subagents ORDER BY created_sequence",
         )?;
@@ -992,17 +956,7 @@ impl Database {
         Ok(out)
     }
 
-    pub fn list_messages(
-        &self,
-    ) -> Result<
-        Vec<(
-            synara_core::EntityId,
-            synara_core::EntityId,
-            String,
-            String,
-            u64,
-        )>,
-    > {
+    pub fn list_messages(&self) -> Result<Vec<MessageRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id,thread_id,role,content,created_sequence FROM messages ORDER BY created_sequence",
         )?;
