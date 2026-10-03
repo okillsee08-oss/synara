@@ -9,6 +9,7 @@ impl BrowserSession {
         let trimmed = url.trim();
         if trimmed.is_empty() { anyhow::bail!("browser URL cannot be empty"); }
         let scheme = trimmed.split_once("://").map(|(scheme, _)| scheme.to_ascii_lowercase());
+        if trimmed.contains(char::is_whitespace) { anyhow::bail!("browser URL must not contain whitespace"); }
         match scheme.as_deref() { Some("http") | Some("https") => Ok(()), _ => anyhow::bail!("unsupported browser URL scheme") }
     }
 }
