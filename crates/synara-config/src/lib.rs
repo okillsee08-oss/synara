@@ -56,6 +56,12 @@ impl Default for ServerConfig {
 }
 
 impl ServerConfig {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.epoch == 0 { anyhow::bail!("server epoch must be greater than zero"); }
+        if self.client_build.trim().is_empty() { anyhow::bail!("client build must not be empty"); }
+        Ok(())
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
         let defaults = Self::default();
         Ok(Self {
