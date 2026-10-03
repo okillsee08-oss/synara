@@ -300,8 +300,8 @@ async fn negotiate(
             }),
         )
     })?;
-    if let Some(epoch) = q.epoch {
-        if epoch != s.epoch {
+    if let Some(epoch) = q.epoch
+        && epoch != s.epoch {
             return Err((
                 axum::http::StatusCode::UPGRADE_REQUIRED,
                 Json(ApiError {
@@ -311,8 +311,8 @@ async fn negotiate(
             ));
         }
     }
-    if let Some(build) = q.client_build.as_deref() {
-        if build.trim().is_empty() {
+    if let Some(build) = q.client_build.as_deref()
+        && build.trim().is_empty() {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(ApiError {
@@ -465,9 +465,7 @@ async fn start_turn(
 async fn list_terminals(State(s): State<ApiState>) -> Json<Vec<TerminalResponse>> {
     let terminals = s.terminals.lock().await;
     Json(
-        terminals
-            .iter()
-            .map(|(id, _)| TerminalResponse {
+        terminals.keys().map(|id| TerminalResponse {
                 id: id.clone(),
                 shell: "managed".into(),
                 cwd: None,
@@ -1090,8 +1088,8 @@ async fn websocket(
             }),
         )
     })?;
-    if let Some(epoch) = q.epoch {
-        if epoch != s.epoch {
+    if let Some(epoch) = q.epoch
+        && epoch != s.epoch {
             return Err((
                 axum::http::StatusCode::UPGRADE_REQUIRED,
                 Json(ApiError {
@@ -1101,8 +1099,8 @@ async fn websocket(
             ));
         }
     }
-    if let Some(instance) = q.server_instance.as_deref() {
-        if instance != s.server_instance_id.as_ref() {
+    if let Some(instance) = q.server_instance.as_deref()
+        && instance != s.server_instance_id.as_ref() {
             return Err((
                 axum::http::StatusCode::UPGRADE_REQUIRED,
                 Json(ApiError {
@@ -1112,8 +1110,8 @@ async fn websocket(
             ));
         }
     }
-    if let Some(build) = q.client_build.as_deref() {
-        if build.trim().is_empty() {
+    if let Some(build) = q.client_build.as_deref()
+        && build.trim().is_empty() {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
                 Json(ApiError {
