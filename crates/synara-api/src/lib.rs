@@ -465,7 +465,9 @@ async fn start_turn(
 async fn list_terminals(State(s): State<ApiState>) -> Json<Vec<TerminalResponse>> {
     let terminals = s.terminals.lock().await;
     Json(
-        terminals.keys().map(|id| TerminalResponse {
+        terminals
+            .keys()
+            .map(|id| TerminalResponse {
                 id: id.clone(),
                 shell: "managed".into(),
                 cwd: None,
